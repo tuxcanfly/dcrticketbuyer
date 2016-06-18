@@ -145,7 +145,7 @@ prefer for ticket purchase. For reference, these options are given below.
                             3)
       --balancetomaintain=  Balance to try to maintain in the wallet
       --highpricepenalty=   The exponential penalty to apply to the number of
-                            tickets to purchase above the mean ticket pool price
+                            tickets to purchase above the ideal ticket pool price
                             (default: 1.3) (1.3)
       --blockstoavg=        Number of blocks to average for fees calculation
                             (default: 11) (11)
