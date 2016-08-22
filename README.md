@@ -363,13 +363,13 @@ simnet=false
 The program may then be run with
 
 ```bash
-$ dcrtickeybuyer -C ticketbuyer.conf
+$ dcrticketbuyer -C ticketbuyer.conf
 ```
 
 To enable more explicit output, set the debug level 
 for the ticket buyer subsystem to debug or trace:
 ```bash
-$ dcrtickeybuyer -C ticketbuyer.conf -d TKBY=debug
+$ dcrticketbuyer -C ticketbuyer.conf -d TKBY=debug
 ```
 
 
