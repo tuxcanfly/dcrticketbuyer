@@ -201,6 +201,12 @@ func main() {
 	log.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
+	err = wsm.purchaser.purchase(atomic.LoadInt32(&glChainHeight))
+	if err != nil {
+		log.Errorf("Failed to purchase tickets this round: %s",
+			err.Error())
+	}
+
 	// If the HTTP server is enabled, spin it up and begin
 	// displaying the front page locally.
 	if cfg.HttpSvrPort > 0 {
