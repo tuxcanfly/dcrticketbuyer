@@ -40,7 +40,7 @@ var csvFeesFn = "fees.csv"
 // csvUpdateData contains all the information required to update the CSV
 // files for the HTTP server.
 type csvUpdateData struct {
-	height     int32
+	height     int64
 	tpMinScale float64
 	tpMaxScale float64
 	tpAverage  float64
@@ -146,7 +146,7 @@ func initCsvFiles() error {
 
 // strTicketPriceCsv converts data relating to future ticket prices into an
 // easy-to-write string for the csv files.
-func strTicketPriceCsv(height int32, minScale, maxScale, average, next,
+func strTicketPriceCsv(height int64, minScale, maxScale, average, next,
 	current float64) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%v,MinScale,%v\n", height, minScale))
@@ -160,7 +160,7 @@ func strTicketPriceCsv(height int32, minScale, maxScale, average, next,
 
 // strTicketNumCsv converts data relating to number of tickets in the mempool
 // to an easy-to-write string for the csv files.
-func strTicketNumCsv(height int32, all, own int) string {
+func strTicketNumCsv(height int64, all, own int) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%v,All,%v\n", height, all))
 	buf.WriteString(fmt.Sprintf("%v,Own,%v\n", height, own))
@@ -170,7 +170,7 @@ func strTicketNumCsv(height int32, all, own int) string {
 
 // strPurchasedCsv converts data relating to number of tickets purchased this
 // block to an easy-to-write string for the csv files.
-func strPurchasedCsv(height int32, purchased int) string {
+func strPurchasedCsv(height int64, purchased int) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%v,Purchased,%v\n", height, purchased))
 
@@ -179,7 +179,7 @@ func strPurchasedCsv(height int32, purchased int) string {
 
 // strFeesCsv converts data relating to per KB fees of recently purchased tickets
 // to an easy-to-write string for the csv files.
-func strFeesCsv(height int32, min, max, median, mean, own float64) string {
+func strFeesCsv(height int64, min, max, median, mean, own float64) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%v,Minimum,%v\n", height, min))
 	buf.WriteString(fmt.Sprintf("%v,Maximum,%v\n", height, min))
@@ -285,7 +285,7 @@ func writeToCsvFiles(csvUD csvUpdateData) error {
 // addDimpleChart adds a simple dimple chart tracking multiple datasets labeled
 // under an identifier.
 func addDimpleChart(chartName, title, dataLoc, xItem, yItem,
-	identifier string, heightCutoff int32, useStep bool) string {
+	identifier string, heightCutoff int64, useStep bool) string {
 	svgName := chartName + "Svg"
 	chartTemplate := `
 	<script type="text/javascript">
@@ -347,7 +347,7 @@ func writeMainGraphs(w http.ResponseWriter, r *http.Request) {
 	defer csvWriteMutex.Unlock()
 
 	// Load the chainHeight for use in filtering the graphs.
-	height := atomic.LoadInt32(&glChainHeight)
+	height := atomic.LoadInt64(&glChainHeight)
 	balance := atomic.LoadInt64(&glBalance)
 	balanceAmt := dcrutil.Amount(balance)
 	stakeDiff := atomic.LoadInt64(&glTicketPrice)

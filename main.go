@@ -24,7 +24,7 @@ import (
 var (
 	// chainHeight is the global chainHeight. It must be accessed with
 	// atomic operators.
-	glChainHeight = int32(0)
+	glChainHeight = int64(0)
 
 	// glBalance is the global balance. It is updated at start up and
 	// after every round of ticket purchases. It must be accessed with
@@ -48,7 +48,7 @@ func syncGlobalsStartup(dcrdClient *dcrrpcclient.Client,
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt32(&glChainHeight, height)
+	atomic.StoreInt64(&glChainHeight, height)
 
 	bal, err := dcrwClient.GetBalanceMinConfType(cfg.AccountName,
 		0, "spendable")
@@ -92,12 +92,12 @@ func main() {
 
 	// Connect to dcrd RPC server using websockets. Set up the
 	// notification handler to deliver blocks through a channel.
-	connectChan := make(chan int32, blockConnChanBuffer)
+	connectChan := make(chan int64, blockConnChanBuffer)
 	quit := make(chan struct{})
 	ntfnHandlersDaemon := dcrrpcclient.NotificationHandlers{
 		OnBlockConnected: func(hash *chainhash.Hash, height int32,
 			time time.Time, vb uint16) {
-			connectChan <- height
+			connectChan <- int64(height)
 		},
 	}
 
@@ -201,7 +201,7 @@ func main() {
 	log.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	err = wsm.purchaser.purchase(atomic.LoadInt32(&glChainHeight))
+	err = wsm.purchaser.purchase(atomic.LoadInt64(&glChainHeight))
 	if err != nil {
 		log.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())

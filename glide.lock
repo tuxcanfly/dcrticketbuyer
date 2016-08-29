@@ -1,10 +1,8 @@
-hash: 2abe2037567b31026a5bf51d0548cc56ecdd0369ed70d9b0d5c830638dd77610
-updated: 2016-06-03T17:27:04.570084131-04:00
+hash: 197aca5d37017e0b4e7d39430c5e01f95a85c47cc95ea10bc8bee40fafe211e4
+updated: 2016-08-29T14:10:43.408430312-04:00
 imports:
 - name: github.com/btcsuite/btclog
-  version: f96df2375f37300305f329b8e5258764b4f19a7f
-- name: github.com/btcsuite/fastsha256
-  version: 302ad4db268b46f9ebda3078f6f7397f96047735
+  version: 73889fb79bd687870312b6e40effcecffbd57d30
 - name: github.com/btcsuite/go-flags
   version: 6c288d648c1cc1befcb90cb5511dcacf64ae8e61
 - name: github.com/btcsuite/go-socks
@@ -14,10 +12,7 @@ imports:
 - name: github.com/btcsuite/golangcrypto
   version: 53f62d9b43e87a6c56975cf862af7edf33a8d0df
   subpackages:
-  - nacl/secretbox
   - ripemd160
-  - scrypt
-  - ssh/terminal
 - name: github.com/btcsuite/seelog
   version: 313961b101eb55f65ae0f03ddd4e322731763b6c
 - name: github.com/btcsuite/websocket
@@ -25,28 +20,24 @@ imports:
 - name: github.com/decred/blake256
   version: a840e32d7c31fe2e0218607334cb120a683951a4
 - name: github.com/decred/dcrd
-  version: eda86f5267b747f095da4235cfb10fa361b5f769
+  version: 99b7aadb855d0b964e73054cedcc2bc1d0be208e
   subpackages:
-  - blockchain
-  - blockchain/stake
   - chaincfg
   - chaincfg/chainec
   - chaincfg/chainhash
-  - dcrjson
-  - txscript
-  - wire
   - dcrec/edwards
   - dcrec/secp256k1
   - dcrec/secp256k1/schnorr
+  - dcrjson
+  - wire
 - name: github.com/decred/dcrrpcclient
-  version: f3c620d63cb02aec0c1152a72d3c8669b92a2fb5
+  version: 103ed11be3a7035554d3925fbfaa67742641510f
 - name: github.com/decred/dcrutil
-  version: 74563ea520b1215b9c10f96507b7a9984894c0b5
+  version: 4fc91a08eea88e74539d42d6301fd298b9bd8230
   subpackages:
-  - hdkeychain
   - base58
 - name: github.com/decred/dcrwallet
-  version: 98f501b8d5cfdad2876bf6cffde4b118a1551dcf
+  version: 59f8489eaf540d3ab4b3c70185b997349205bcdc
   subpackages:
   - netparams
 - name: github.com/decred/ed25519
@@ -55,4 +46,4 @@ imports:
   - edwards25519
 - name: github.com/jessevdk/go-flags
   version: 1679536dcc895411a9f5848d9a0250be7856448c
-devImports: []
+testImports: []

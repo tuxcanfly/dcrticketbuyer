@@ -43,13 +43,13 @@ var (
 // pass to the purchaser and internal quit notifications.
 type purchaseManager struct {
 	purchaser          *ticketPurchaser
-	blockConnectedChan chan int32
+	blockConnectedChan chan int64
 	quit               chan struct{}
 }
 
 // newPurchaseManager creates a new purchaseManager.
 func newPurchaseManager(purchaser *ticketPurchaser,
-	blockConnChan chan int32,
+	blockConnChan chan int64,
 	quit chan struct{}) *purchaseManager {
 	return &purchaseManager{
 		purchaser:          purchaser,
@@ -66,7 +66,7 @@ out:
 		select {
 		case height := <-p.blockConnectedChan:
 			daemonLog.Infof("Block height %v connected", height)
-			atomic.StoreInt32(&glChainHeight, height)
+			atomic.StoreInt64(&glChainHeight, height)
 			err := p.purchaser.purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
@@ -161,7 +161,7 @@ func newTicketPurchaser(cfg *config,
 
 // purchase is the main handler for purchasing tickets for the user.
 // TODO Not make this an inlined pile of crap.
-func (t *ticketPurchaser) purchase(height int32) error {
+func (t *ticketPurchaser) purchase(height int64) error {
 	// Initialize webserver update data. If the webserver is
 	// enabled, defer a function that writes this data to the
 	// disk.
@@ -200,7 +200,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// Just starting up, initialize our purchaser and start
 	// buying. Set the start up regular transaction fee here
 	// too.
-	winSize := int32(activeNet.StakeDiffWindowSize)
+	winSize := activeNet.StakeDiffWindowSize
 	fillTicketQueue := false
 	if t.firstStart {
 		t.idxDiffPeriod = int(height % winSize)

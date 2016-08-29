@@ -51,7 +51,7 @@ func containsVWAPHeightOffsetError(err error) bool {
 
 // calcAverageTicketPrice calculates the average price of a ticket based on
 // the parameters set by the user.
-func (t *ticketPurchaser) calcAverageTicketPrice(height int32) (dcrutil.Amount, error) {
+func (t *ticketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, error) {
 	// Pull and store relevant data about the blockchain. Calculate a
 	// "reasonable" ticket price by using the VWAP for the last delta many
 	// blocks or the average price of all tickets in the ticket pool.
@@ -91,8 +91,8 @@ func (t *ticketPurchaser) calcAverageTicketPrice(height int32) (dcrutil.Amount, 
 		// Don't let the starting height be <0, which in the case of
 		// uint32 ends up a really big number.
 		startVWAPHeight := uint32(0)
-		if height-int32(t.cfg.AvgPriceVWAPDelta) > 0 {
-			startVWAPHeight = uint32(height - int32(t.cfg.AvgPriceVWAPDelta))
+		if height-int64(t.cfg.AvgPriceVWAPDelta) > 0 {
+			startVWAPHeight = uint32(height - int64(t.cfg.AvgPriceVWAPDelta))
 		}
 		endVWAPHeight := uint32(height)
 
