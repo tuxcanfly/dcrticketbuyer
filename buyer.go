@@ -167,7 +167,7 @@ func (t *ticketPurchaser) purchase(height int32) error {
 	// disk.
 	var csvData csvUpdateData
 	csvData.height = height
-	if t.cfg.HttpSvrPort != 0 {
+	if t.cfg.HTTPSvrPort != 0 {
 		// Write ticket fee info for the current block to the
 		// CSV update data.
 		oneBlock := uint32(1)

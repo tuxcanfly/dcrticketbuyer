@@ -17,17 +17,18 @@ import (
 )
 
 const (
-	defaultConfigFilename = "ticketbuyer.conf"
+	defaultConfigFilename = "dcrticketbuyer.conf"
+	defaultDataDirname    = "data"
 	defaultLogLevel       = "info"
 	defaultLogDirname     = "logs"
-	defaultLogFilename    = "ticketbuyer.log"
+	defaultLogFilename    = "dcrticketbuyer.log"
 )
 
 var activeNet = &netparams.MainNetParams
 
 // csvPath is the default path for web server CSV files to be
-// held in and for the JavaScript libraries. It is set to whatever
-// HttpUIPath is after loading the configuration.
+// held in.  It is set to the DataDir after loading the
+// configuration.
 var csvPath = ""
 
 var (
@@ -37,13 +38,13 @@ var (
 	defaultDaemonRPCKeyFile  = filepath.Join(dcrdHomeDir, "rpc.key")
 	defaultDaemonRPCCertFile = filepath.Join(dcrdHomeDir, "rpc.cert")
 	defaultConfigFile        = filepath.Join(dcrticketbuyerHomeDir, defaultConfigFilename)
+	defaultDataDir           = filepath.Join(dcrticketbuyerHomeDir, defaultDataDirname)
 	defaultWalletRPCKeyFile  = filepath.Join(dcrwalletHomeDir, "rpc.key")
 	defaultWalletRPCCertFile = filepath.Join(dcrwalletHomeDir, "rpc.cert")
 	defaultLogDir            = filepath.Join(dcrticketbuyerHomeDir, defaultLogDirname)
 	defaultHost              = "localhost"
-	defaultHttpServerBind    = "localhost"
-	defaultHttpServerPort    = 0
-	defaultHttpUIPath        = "webui/"
+	defaultHTTPServerBind    = "localhost"
+	defaultHTTPServerPort    = 0
 
 	defaultAccountName        = "default"
 	defaultTicketAddress      = ""
@@ -71,14 +72,14 @@ var (
 type config struct {
 	// General application behavior
 	ConfigFile  string `short:"C" long:"configfile" description:"Path to configuration file"`
+	DataDir     string `short:"b" long:"datadir" description:"Directory to store data"`
 	ShowVersion bool   `short:"V" long:"version" description:"Display version information and exit"`
 	TestNet     bool   `long:"testnet" description:"Use the test network (default mainnet)"`
 	SimNet      bool   `long:"simnet" description:"Use the simulation test network (default mainnet)"`
 	DebugLevel  string `short:"d" long:"debuglevel" description:"Logging level {trace, debug, info, warn, error, critical}"`
 	LogDir      string `long:"logdir" description:"Directory to log output"`
-	HttpSvrBind string `long:"httpsvrbind" description:"IP to bind for the HTTP server that tracks ticket purchase metrics (default: \"\" or localhost)"`
-	HttpSvrPort int    `long:"httpsvrport" description:"Server port for the HTTP server that tracks ticket purchase metrics; disabled if 0 (default: 0)"`
-	HttpUIPath  string `long:"httpuipath" description:"Path for the data and JavaScript libraries for displaying/storing purchase metrics (default: \"webui/\")"`
+	HTTPSvrBind string `long:"httpsvrbind" description:"IP to bind for the HTTP server that tracks ticket purchase metrics (default: \"\" or localhost)"`
+	HTTPSvrPort int    `long:"httpsvrport" description:"Server port for the HTTP server that tracks ticket purchase metrics; disabled if 0 (default: 0)"`
 
 	// RPC client options
 	DcrdUser         string `long:"dcrduser" description:"Daemon RPC user name"`
@@ -226,10 +227,10 @@ func loadConfig() (*config, error) {
 	cfg := config{
 		DebugLevel:         defaultLogLevel,
 		ConfigFile:         defaultConfigFile,
+		DataDir:            defaultDataDir,
 		LogDir:             defaultLogDir,
-		HttpSvrBind:        defaultHttpServerBind,
-		HttpSvrPort:        defaultHttpServerPort,
-		HttpUIPath:         defaultHttpUIPath,
+		HTTPSvrBind:        defaultHTTPServerBind,
+		HTTPSvrPort:        defaultHTTPServerPort,
 		DcrdCert:           defaultDaemonRPCCertFile,
 		DcrwCert:           defaultWalletRPCCertFile,
 		AccountName:        defaultAccountName,
@@ -359,6 +360,33 @@ func loadConfig() (*config, error) {
 		return loadConfigError(err)
 	}
 
+	// Append the network type to the data directory so it is "namespaced"
+	// per network.  The CSV files for the web UI will go here.
+	// All data is specific to a network, so namespacing the data directory
+	// means each individual piece of serialized data does not have to
+	// worry about changing names per network and such.
+	cfg.DataDir = cleanAndExpandPath(cfg.DataDir)
+	cfg.DataDir = filepath.Join(cfg.DataDir, activeNet.Name)
+
+	// Create the data dir if it does not exist.
+	err = os.MkdirAll(cfg.DataDir, 0700)
+	if err != nil {
+		// Show a nicer error message if it's because a symlink is
+		// linked to a directory that does not exist (probably because
+		// it's not mounted).
+		if e, ok := err.(*os.PathError); ok && os.IsExist(err) {
+			if link, lerr := os.Readlink(e.Path); lerr == nil {
+				str := "is symlink %s -> %s mounted?"
+				err = fmt.Errorf(str, e.Path, link)
+			}
+		}
+
+		str := "%s: Failed to create data directory: %v"
+		err := fmt.Errorf(str, funcName, err)
+		fmt.Fprintln(os.Stderr, err)
+		return loadConfigError(err)
+	}
+
 	// If the user has set a pool address, the pool fees for the
 	// pool can not be zero.
 	if cfg.PoolAddress != "" && cfg.PoolFees == 0.0 {
@@ -379,7 +407,7 @@ func loadConfig() (*config, error) {
 	}
 
 	// The HTTP server port can not be beyond a uint16's size in value.
-	if cfg.HttpSvrPort > 0xffff {
+	if cfg.HTTPSvrPort > 0xffff {
 		str := "%s: Invalid HTTP port number for HTTP server"
 		err := fmt.Errorf(str, "loadConfig")
 		fmt.Fprintln(os.Stderr, err)
@@ -435,7 +463,7 @@ func loadConfig() (*config, error) {
 		return loadConfigError(err)
 	}
 
-	csvPath = cfg.HttpUIPath
+	csvPath = cfg.DataDir
 
 	return &cfg, nil
 }

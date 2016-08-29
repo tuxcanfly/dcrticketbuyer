@@ -40,10 +40,6 @@ run the following:
 $ go get -u github.com/Masterminds/glide
 ```
 
-**NOTE:** If you are using Go 1.5, you must manually enable the vendor
-experiment by setting the `GO15VENDOREXPERIMENT` environment variable to `1`.
-This step is not required for Go 1.6.
-
 - Run the following commands to obtain dcrticketbuyer, all dependencies, and 
 install it:
 
@@ -82,7 +78,9 @@ prefer for ticket purchase. For reference, these options are given below.
 
 ```
   -C, --configfile=         Path to configuration file
-                            (~/.dcrticketbuyer/ticketbuyer.conf)
+                            (~/.dcrticketbuyer/dcrticketbuyer.conf)
+  -b, --datadir=            Directory to store data
+                            (~/.dcrticketbuyer/data)
   -V, --version             Display version information and exit
       --testnet             Use the test network (default mainnet)
       --simnet              Use the simulation test network (default mainnet)
@@ -92,80 +90,80 @@ prefer for ticket purchase. For reference, these options are given below.
                             (~/.dcrticketbuyer/logs)
       --httpsvrbind=        IP to bind for the HTTP server that tracks ticket
                             purchase metrics (default: "" or localhost)
+                            (localhost)
       --httpsvrport=        Server port for the HTTP server that tracks ticket
                             purchase metrics; disabled if 0 (default: 0)
-      --httpuipath=         Path for the data and JavaScript libraries for
-                            displaying/storing purchase metrics (default: "webui/")
-                            (webui/)
       --dcrduser=           Daemon RPC user name
       --dcrdpass=           Daemon RPC password
-      --dcrdserv=           Hostname/IP and port of dcrd RPC server to connect to
-                            (default localhost:9109, testnet: localhost:19109,
-                            simnet: localhost:18556)
+      --dcrdserv=           Hostname/IP and port of dcrd RPC server to connect
+                            to (default localhost:9109, testnet:
+                            localhost:19109, simnet: localhost:19556)
       --dcrdcert=           File containing the dcrd certificate file
                             (~/.dcrd/rpc.cert)
       --dcrwuser=           Wallet RPC user name
       --dcrwpass=           Wallet RPC password
-      --dcrwserv=           Hostname/IP and port of dcrwallet RPC server to connect
-                            to (default localhost:9110, testnet: localhost:19110,
-                            simnet: localhost:18557)
+      --dcrwserv=           Hostname/IP and port of dcrwallet RPC server to
+                            connect to (default localhost:9110, testnet:
+                            localhost:19110, simnet: localhost:19557)
       --dcrwcert=           File containing the dcrwallet certificate file
                             (~/.dcrwallet/rpc.cert)
-      --noclienttls         Disable TLS for the RPC client -- NOTE: This is only
-                            allowed if the RPC client is connecting to localhost
+      --noclienttls         Disable TLS for the RPC client -- NOTE: This is
+                            only allowed if the RPC client is connecting to
+                            localhost
       --accountname=        Name of the account to buy tickets from (default:
                             default) (default)
       --ticketaddress=      Address to give ticket voting rights to
       --pooladdress=        Address to give pool fees rights to
-      --poolfees=           The pool fee base rate for a given pool as a percentage
-                            (0.01 to 100.00%)
+      --poolfees=           The pool fee base rate for a given pool as a
+                            percentage (0.01 to 100.00%)
       --maxpriceabsolute=   The absolute maximum price to pay for a ticket
                             (default: 100.0 Coin) (100)
       --maxpricescale=      Attempt to prevent the stake difficulty from going
-                            above this multiplier (>1.0) by manipulation (default:
-                            2.0, 0.0 to disable) (2)
+                            above this multiplier (>1.0) by manipulation
+                            (default: 2.0, 0.0 to disable) (2)
       --minpricescale=      Attempt to prevent the stake difficulty from going
-                            below this multiplier (<1.0) by manipulation (default:
-                            0.7, 0.0 to disable) (0.7)
+                            below this multiplier (<1.0) by manipulation
+                            (default: 0.7, 0.0 to disable) (0.7)
       --pricetarget=        A target to try to seek setting the stake price to
-                            rather than meeting the average price (default: 0.0,
-                            0.0 to disable)
-      --avgpricemode=       The mode to use for calculating the average price if
-                            pricetarget is disabled (default: dual)
-      --avgpricevwapdelta=  The number of blocks to use from the current block to
-                            calculate the VWAP (default: 2880)
+                            rather than meeting the average price (default:
+                            0.0, 0.0 to disable)
+      --avgpricemode=       The mode to use for calculating the average price
+                            if pricetarget is disabled (default: dual) (vwap)
+      --avgpricevwapdelta=  The number of blocks to use from the current block
+                            to calculate the VWAP (default: 2880) (2880)
       --maxfee=             Maximum ticket fee per KB (default: 1.0 Coin/KB) (1)
-      --minfee=             Minimum ticket fee per KB (default: 0.01 Coin/KB) (0.01)
-      --feesource=          The fee source to use for ticket fee per KB (median or
-                            mean, default: mean) (mean)
+      --minfee=             Minimum ticket fee per KB (default: 0.01 Coin/KB)
+                            (0.01)
+      --feesource=          The fee source to use for ticket fee per KB (median
+                            or mean, default: mean) (mean)
       --txfee=              Default regular tx fee per KB, for consolidations
                             (default: 0.01 Coin/KB) (0.01)
-      --maxperblock=        Maximum tickets per block, with negative numbers 
-                            indicating buy one ticket every 1-in-n blocks (default: 
-                            3)
+      --maxperblock=        Maximum tickets per block, with negative numbers
+                            indicating buy one ticket every 1-in-n blocks
+                            (default: 3) (3)
       --balancetomaintain=  Balance to try to maintain in the wallet
       --highpricepenalty=   The exponential penalty to apply to the number of
-                            tickets to purchase above the ideal ticket pool price
-                            (default: 1.3) (1.3)
+                            tickets to purchase above the ideal ticket pool
+                            price (default: 1.3) (1.3)
       --blockstoavg=        Number of blocks to average for fees calculation
                             (default: 11) (11)
-      --feetargetscaling=   The amount above the mean fee in the previous blocks to
-                            purchase tickets with, proportional e.g. 1.05 = 105%
-                            (default: 1.05) (1.05)
+      --feetargetscaling=   The amount above the mean fee in the previous
+                            blocks to purchase tickets with, proportional e.g.
+                            1.05 = 105% (default: 1.05) (1.05)
       --dontwaitfortickets  Don't wait until your last round of tickets have
                             entered the blockchain to attempt to purchase more
-      --maxinmempool=       The maximum number of tickets allowed in mempool before
-                            purchasing more tickets (default: 0)
-      --expirydelta=        Number of blocks in the future before the ticket expires
-                            (default: 16) (16)
+      --maxinmempool=       The maximum number of tickets allowed in mempool
+                            before purchasing more tickets (default: 0)
+      --expirydelta=        Number of blocks in the future before the ticket
+                            expires (default: 16) (16)
 ```
 
 #### Running on Linux/BSD/POSIX after Compilation
 
 It is recommended to use a configuration file to fine tune the software. A 
 sample configuration file is give below, with explanations about what the 
-software will do. This is also found in the reposity itself as 
-"ticketbuyer-example.conf".
+software will do. This is also found in the repository itself as
+"sample-dcrticketbuyer.conf".
 
 ```
 #########################################
@@ -198,12 +196,9 @@ dcrwcert=path/to/.dcrwallet/rpc.cert
 ## bind the server externally or to another IP.
 httpsvrport=7770
 
-## The path to store monitoring logs in along with all 
-## the libraries/data for the HTTP server. This folder 
-## must constain the JavaScript libraries d3 and dimple 
-## for this to function correctly.
-## By default, the path is "webui/" in PWD.
-httpuipath=webui/
+## The path to store CSV data for the Web UI.
+## The default path is ~/.dcrticketbuyer/data
+#datadir=~/.dcrticketbuyer/data
 
 ## Enable testnet. Set to false to use mainnet. Can not 
 ## be used with simnet.
@@ -227,7 +222,7 @@ simnet=false
 # maxperblock=5
 
 ## Stop buying tickets if the mempool has more than 
-## 40 tickets in in.
+## 40 tickets in it.
 #
 # maxinmempool=40
 
@@ -363,13 +358,13 @@ simnet=false
 The program may then be run with
 
 ```bash
-$ dcrticketbuyer -C ticketbuyer.conf
+$ dcrticketbuyer -C dcrticketbuyer.conf
 ```
 
 To enable more explicit output, set the debug level 
 for the ticket buyer subsystem to debug or trace:
 ```bash
-$ dcrticketbuyer -C ticketbuyer.conf -d TKBY=debug
+$ dcrticketbuyer -C dcrticketbuyer.conf -d TKBY=debug
 ```
 
 

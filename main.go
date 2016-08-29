@@ -82,7 +82,7 @@ func main() {
 	dcrrpcclient.UseLogger(clientLog)
 
 	// Initialize the CSV files for the HTTP server if needed.
-	if cfg.HttpSvrPort != 0 {
+	if cfg.HTTPSvrPort != 0 {
 		err := initCsvFiles()
 		if err != nil {
 			fmt.Printf("Failed to init https files: %s\n", err.Error())
@@ -209,15 +209,12 @@ func main() {
 
 	// If the HTTP server is enabled, spin it up and begin
 	// displaying the front page locally.
-	if cfg.HttpSvrPort > 0 {
+	if cfg.HTTPSvrPort > 0 {
 		go func() {
-			port := strconv.Itoa(cfg.HttpSvrPort)
+			port := strconv.Itoa(cfg.HTTPSvrPort)
 			http.HandleFunc("/", writeMainGraphs)
-			http.HandleFunc("/webui/", func(w http.ResponseWriter,
-				r *http.Request) {
-				http.ServeFile(w, r, r.URL.Path[1:])
-			})
-			err := http.ListenAndServe(cfg.HttpSvrBind+":"+port, nil)
+			http.Handle("/csvdata/", http.StripPrefix("/csvdata/", http.FileServer(http.Dir(cfg.DataDir))))
+			err := http.ListenAndServe(cfg.HTTPSvrBind+":"+port, nil)
 			if err != nil {
 				log.Errorf("Failed to bind http server: %s", err.Error())
 			}
