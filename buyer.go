@@ -140,7 +140,7 @@ func newTicketPurchaser(cfg *config,
 	priceMode := avgPriceMode(AvgPriceVWAPMode)
 	switch cfg.AvgPriceMode {
 	case usePoolPriceStr:
-		priceMode = AvgPriceVWAPMode
+		priceMode = AvgPricePoolMode
 	case useDualPriceStr:
 		priceMode = AvgPriceDualMode
 	}
