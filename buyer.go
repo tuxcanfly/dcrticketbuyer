@@ -269,7 +269,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	switch {
 	case t.cfg.MaxPerBlock == 0:
 		return nil
-	case t.cfg.MaxPerBlock > 1:
+	case t.cfg.MaxPerBlock > 0:
 		maxPerBlock = t.cfg.MaxPerBlock
 	case t.cfg.MaxPerBlock < 0:
 		if int(height)%t.cfg.MaxPerBlock != 0 {
