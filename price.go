@@ -98,7 +98,6 @@ func (t *ticketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, 
 
 		// Sometimes the chain is a little slow to update, retry
 		// if the chain gives us an issue.
-		var ticketVWAP dcrutil.Amount
 		var err error
 		for i := 0; i < vwapReqTries; i++ {
 			ticketVWAP, err = t.dcrdChainSvr.TicketVWAP(&startVWAPHeight,
