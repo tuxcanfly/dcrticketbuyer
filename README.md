@@ -152,8 +152,8 @@ prefer for ticket purchase. For reference, these options are given below.
                             1.05 = 105% (default: 1.05) (1.05)
       --dontwaitfortickets  Don't wait until your last round of tickets have
                             entered the blockchain to attempt to purchase more
-      --maxinmempool=       The maximum number of tickets allowed in mempool
-                            before purchasing more tickets (default: 0)
+      --maxinmempool=       The maximum number of your tickets allowed in
+                            mempool before purchasing more tickets (default: 0)
       --expirydelta=        Number of blocks in the future before the ticket
                             expires (default: 16) (16)
 ```
@@ -222,7 +222,7 @@ simnet=false
 # maxperblock=5
 
 ## Stop buying tickets if the mempool has more than 
-## 40 tickets in it.
+## 40 of your tickets in it.
 #
 # maxinmempool=40
 
