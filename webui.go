@@ -49,6 +49,7 @@ type csvUpdateData struct {
 	tnAll      int
 	tnOwn      int
 	purchased  int
+	leftWindow int
 	tfMin      float64
 	tfMax      float64
 	tfMedian   float64
@@ -110,7 +111,6 @@ func initCsvFiles() error {
 			"from them")
 		return nil
 	}
-
 	// Create the respective files and initialize the CSVs
 	// with proper headers.
 	f, err := os.Create(filepath.Join(csvPath, csvTicketPricesFn))
@@ -170,9 +170,10 @@ func strTicketNumCsv(height int64, all, own int) string {
 
 // strPurchasedCsv converts data relating to number of tickets purchased this
 // block to an easy-to-write string for the csv files.
-func strPurchasedCsv(height int64, purchased int) string {
+func strPurchasedCsv(height int64, purchased, leftWindow int) string {
 	var buf bytes.Buffer
 	buf.WriteString(fmt.Sprintf("%v,Purchased,%v\n", height, purchased))
+	buf.WriteString(fmt.Sprintf("%v,RemainingToBuy,%v\n", height, leftWindow))
 
 	return buf.String()
 }
@@ -244,7 +245,7 @@ func writeToCsvFiles(csvUD csvUpdateData) error {
 		return err
 	}
 	writer = bufio.NewWriter(f)
-	str = strPurchasedCsv(height, csvUD.purchased)
+	str = strPurchasedCsv(height, csvUD.purchased, csvUD.leftWindow)
 	_, err = writer.WriteString(str)
 	if err != nil {
 		return err

@@ -5,8 +5,13 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
+	"io"
 	"math"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/decred/dcrrpcclient"
@@ -100,6 +105,8 @@ type ticketPurchaser struct {
 	idxDiffPeriod       int          // Relative block index within the difficulty period
 	toBuyDiffPeriod     int          // Number to buy in this period
 	purchasedDiffPeriod int          // Number already bought in this period
+	prevToBuyDiffPeriod int          // Number of tickets to buy this period from a previous instance
+	prevToBuyHeight     int          // The height from the last time buy diff period was recorded in csv
 	maintainMaxPrice    bool         // Flag for maximum price manipulation
 	maintainMinPrice    bool         // Flag for minimum price manipulation
 	useMedian           bool         // Flag for using median for ticket fees
@@ -146,18 +153,64 @@ func newTicketPurchaser(cfg *config,
 		priceMode = AvgPriceDualMode
 	}
 
+	// Here we attempt to load purchased.csv from the webui dir.  This
+	// allows us to attempt to see if there have been previous ticketbuyer
+	// instances during the current stakediff window and reuse the
+	// previously tracked amount of tickets to purchase during that window.
+	f, err := os.OpenFile(filepath.Join(csvPath, csvPurchasedFn),
+		os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.Errorf("Error opening file: %v", err)
+		return nil, err
+	}
+	defer f.Close()
+
+	rdr := csv.NewReader(f)
+	rdr.Comma = ','
+	prevRecord := []string{}
+	for {
+		record, err := rdr.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+		}
+		prevRecord = record
+	}
+
+	// Attempt to parse last line in purchased.csv, then set previous amounts.
+	prevToBuyDiffPeriod := 0
+	lastHeight := 0
+	if len(prevRecord) >= 3 {
+		if prevRecord[1] == "RemainingToBuy" {
+			lastHeight, err = strconv.Atoi(prevRecord[0])
+			if err != nil {
+				log.Errorf("Could not parse last height from "+
+					"csv: %v", err)
+			}
+
+			prevToBuyDiffPeriod, err = strconv.Atoi(prevRecord[2])
+			if err != nil {
+				log.Errorf("Could not parse remaining to buy "+
+					"from csv %v", err)
+			}
+		}
+	}
+
 	return &ticketPurchaser{
-		cfg:              cfg,
-		dcrdChainSvr:     dcrdChainSvr,
-		dcrwChainSvr:     dcrwChainSvr,
-		firstStart:       true,
-		ticketAddress:    ticketAddress,
-		poolAddress:      poolAddress,
-		maintainMaxPrice: maintainMaxPrice,
-		maintainMinPrice: maintainMinPrice,
-		useMedian:        cfg.FeeSource == useMedianStr,
-		priceMode:        priceMode,
-		heightCheck:      make(map[int64]struct{}),
+		cfg:                 cfg,
+		dcrdChainSvr:        dcrdChainSvr,
+		dcrwChainSvr:        dcrwChainSvr,
+		firstStart:          true,
+		ticketAddress:       ticketAddress,
+		poolAddress:         poolAddress,
+		maintainMaxPrice:    maintainMaxPrice,
+		maintainMinPrice:    maintainMinPrice,
+		useMedian:           cfg.FeeSource == useMedianStr,
+		priceMode:           priceMode,
+		heightCheck:         make(map[int64]struct{}),
+		prevToBuyDiffPeriod: prevToBuyDiffPeriod,
+		prevToBuyHeight:     lastHeight,
 	}, nil
 }
 
@@ -179,6 +232,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	// disk.
 	var csvData csvUpdateData
 	csvData.height = height
+
 	if t.cfg.HTTPSvrPort != 0 {
 		// Write ticket fee info for the current block to the
 		// CSV update data.
@@ -363,6 +417,21 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	log.Debugf("Current spendable balance at height %v for account '%s': %v",
 		height, t.cfg.AccountName, balSpendable)
 
+	// Checking to see if previous amount buy tickets and height are set,
+	// then check to make sure that it was from the same current stake
+	// diff window.
+	if t.prevToBuyDiffPeriod != 0 && t.prevToBuyHeight != 0 {
+		prevToBuyWindow := int(t.prevToBuyHeight / int(winSize))
+		if t.windowPeriod == prevToBuyWindow {
+			log.Debugf("Previous tickets to buy amount for this "+
+				"window was found. Using %v for buy ticket amount.",
+				t.prevToBuyDiffPeriod)
+			fillTicketQueue = false
+			t.toBuyDiffPeriod = t.prevToBuyDiffPeriod
+			t.prevToBuyDiffPeriod = 0
+		}
+	}
+
 	// This is the main portion that handles filling up the
 	// queue of tickets to purchase (t.toBuyDiffPeriod).
 	if fillTicketQueue {
@@ -428,7 +497,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 				curPrice, targetPrice, t.toBuyDiffPeriod)
 		}
 	}
-
+	csvData.leftWindow = t.toBuyDiffPeriod
 	// Disable purchasing if the ticket price is too high based on
 	// the absolute cutoff or if the estimated ticket price is above
 	// our scaled cutoff based on the ideal ticket price.
@@ -594,7 +663,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	}
 	t.purchasedDiffPeriod += toBuyForBlock
 	csvData.purchased = toBuyForBlock
-
+	csvData.leftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
 	for i := range tickets {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
 			"fees per KB used)", tickets[i], nextStakeDiff.ToCoin(),
