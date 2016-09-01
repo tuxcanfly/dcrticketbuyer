@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	defaultConfigFilename = "dcrticketbuyer.conf"
+	defaultConfigFilename = "ticketbuyer.conf"
 	defaultDataDirname    = "data"
 	defaultLogLevel       = "info"
 	defaultLogDirname     = "logs"
@@ -80,6 +80,7 @@ type config struct {
 	LogDir      string `long:"logdir" description:"Directory to log output"`
 	HTTPSvrBind string `long:"httpsvrbind" description:"IP to bind for the HTTP server that tracks ticket purchase metrics (default: \"\" or localhost)"`
 	HTTPSvrPort int    `long:"httpsvrport" description:"Server port for the HTTP server that tracks ticket purchase metrics; disabled if 0 (default: 0)"`
+	HTTPUIPath  string `long:"httpuipath" description:"Deprecated and unused option for backwards compatibility."`
 
 	// RPC client options
 	DcrdUser         string `long:"dcrduser" description:"Daemon RPC user name"`

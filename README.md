@@ -78,7 +78,7 @@ prefer for ticket purchase. For reference, these options are given below.
 
 ```
   -C, --configfile=         Path to configuration file
-                            (~/.dcrticketbuyer/dcrticketbuyer.conf)
+                            (~/.dcrticketbuyer/ticketbuyer.conf)
   -b, --datadir=            Directory to store data
                             (~/.dcrticketbuyer/data)
   -V, --version             Display version information and exit
@@ -163,7 +163,7 @@ prefer for ticket purchase. For reference, these options are given below.
 It is recommended to use a configuration file to fine tune the software. A 
 sample configuration file is give below, with explanations about what the 
 software will do. This is also found in the repository itself as
-"sample-dcrticketbuyer.conf".
+"ticketbuyer-example.conf".
 
 ```
 #########################################
@@ -358,13 +358,13 @@ simnet=false
 The program may then be run with
 
 ```bash
-$ dcrticketbuyer -C dcrticketbuyer.conf
+$ dcrticketbuyer -C ticketbuyer.conf
 ```
 
 To enable more explicit output, set the debug level 
 for the ticket buyer subsystem to debug or trace:
 ```bash
-$ dcrticketbuyer -C dcrticketbuyer.conf -d TKBY=debug
+$ dcrticketbuyer -C ticketbuyer.conf -d TKBY=debug
 ```
 
 
