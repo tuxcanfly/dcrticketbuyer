@@ -443,7 +443,12 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		// Calculate the remaining tickets that could possibly be
 		// mined in the current window. If couldBuy is greater than
 		// possible amount than reduce to that amount
-		ticketsLeftInWindow := (winSize - int64(t.idxDiffPeriod)) *
+		diffPeriod := int64(0)
+		if (height+1)%winSize != 0 {
+			// In the middle of a window
+			diffPeriod = int64(t.idxDiffPeriod)
+		}
+		ticketsLeftInWindow := (winSize - diffPeriod) *
 			int64(activeNet.MaxFreshStakePerBlock)
 		if couldBuy > float64(ticketsLeftInWindow) {
 			log.Debugf("The total ticket allotment left in this stakediff window is %v. "+
