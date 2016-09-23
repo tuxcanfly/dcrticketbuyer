@@ -664,11 +664,27 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	t.purchasedDiffPeriod += toBuyForBlock
 	csvData.purchased = toBuyForBlock
 	csvData.leftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
+	var balSpent dcrutil.Amount
 	for i := range tickets {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
 			"fees per KB used)", tickets[i], nextStakeDiff.ToCoin(),
 			feeToUseAmt.ToCoin())
+		tx, err := t.dcrwChainSvr.GetTransaction(tickets[i])
+		if err != nil {
+			return err
+		}
+		amt, err := dcrutil.NewAmount(tx.Amount)
+		if err != nil {
+			return err
+		}
+		fee, err := dcrutil.NewAmount(tx.Fee)
+		if err != nil {
+			return err
+		}
+		balSpent += amt + fee
 	}
+	log.Debugf("Balance spent at height %v for account '%s' "+
+		"after ticket purchases: %v", height, t.cfg.AccountName, balSpent)
 
 	log.Debugf("Tickets purchased so far in this window: %v",
 		t.purchasedDiffPeriod)
