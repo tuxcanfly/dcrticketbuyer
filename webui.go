@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/decred/dcrutil"
 )
@@ -348,11 +347,11 @@ func writeMainGraphs(w http.ResponseWriter, r *http.Request) {
 	defer csvWriteMutex.Unlock()
 
 	// Load the chainHeight for use in filtering the graphs.
-	height := atomic.LoadInt64(&glChainHeight)
-	balance := atomic.LoadInt64(&glBalance)
-	balanceAmt := dcrutil.Amount(balance)
-	stakeDiff := atomic.LoadInt64(&glTicketPrice)
-	stakeDiffAmt := dcrutil.Amount(stakeDiff)
+	globalData.Lock()
+	height := globalData.height
+	balanceAmt := dcrutil.Amount(globalData.balance)
+	stakeDiffAmt := dcrutil.Amount(globalData.stakediff)
+	globalData.Unlock()
 
 	// Page components.
 	mainHeaderStr := `<!DOCTYPE html>

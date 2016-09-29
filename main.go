@@ -11,30 +11,22 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrrpcclient"
-	"github.com/decred/dcrutil"
 )
 
-// Global variables are displayed below that are mainly used for the purposes
-// of the HTTP server.
-var (
-	// chainHeight is the global chainHeight. It must be accessed with
-	// atomic operators.
-	glChainHeight = int64(0)
+// GlobalData holds the account balance, chain height and stake difficulty so
+// that they can be accessed globally. They are accessed in the web handlers of
+// the HTTP server.
+type GlobalData struct {
+	sync.RWMutex
+	balance, height, stakediff int64
+}
 
-	// glBalance is the global balance. It is updated at start up and
-	// after every round of ticket purchases. It must be accessed with
-	// atomic operators.
-	glBalance = int64(0)
-
-	// glTicketPrice is the global ticket price. It is updated at
-	// start up and after every round of ticket purchases.
-	glTicketPrice = int64(0)
-)
+var globalData GlobalData
 
 const (
 	// blockConnChanBuffer is the size of the block connected channel buffer.
@@ -48,24 +40,22 @@ func syncGlobalsStartup(dcrdClient *dcrrpcclient.Client,
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&glChainHeight, height)
 
 	bal, err := dcrwClient.GetBalanceMinConfType(cfg.AccountName,
 		0, "spendable")
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&glBalance, int64(bal))
 
 	sd, err := dcrdClient.GetStakeDifficulty()
 	if err != nil {
 		return err
 	}
-	nsdAmt, err := dcrutil.NewAmount(sd.NextStakeDifficulty)
-	if err != nil {
-		return err
-	}
-	atomic.StoreInt64(&glTicketPrice, int64(nsdAmt))
+	globalData.Lock()
+	globalData.balance = int64(bal)
+	globalData.height = height
+	globalData.stakediff = int64(sd.NextStakeDifficulty)
+	globalData.Unlock()
 
 	return nil
 }
@@ -201,7 +191,7 @@ func main() {
 	log.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	err = wsm.purchaser.purchase(atomic.LoadInt64(&glChainHeight))
+	err = wsm.purchaser.purchase(globalData.height)
 	if err != nil {
 		log.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())

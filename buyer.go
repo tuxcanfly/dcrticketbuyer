@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
@@ -71,7 +70,9 @@ out:
 		select {
 		case height := <-p.blockConnectedChan:
 			daemonLog.Infof("Block height %v connected", height)
-			atomic.StoreInt64(&glChainHeight, height)
+			globalData.Lock()
+			globalData.height = height
+			globalData.Unlock()
 			err := p.purchaser.purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
@@ -375,7 +376,9 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		return err
 	}
 	csvData.tpCurrent = stakeDiffs.NextStakeDifficulty
-	atomic.StoreInt64(&glTicketPrice, int64(nextStakeDiff))
+	globalData.Lock()
+	globalData.stakediff = int64(nextStakeDiff)
+	globalData.Unlock()
 
 	sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
 	if err != nil {
@@ -434,8 +437,11 @@ func (t *ticketPurchaser) purchase(height int64) error {
 
 	// Check for new balance credits and update ticket queue if necessary
 	// TODO: remove atomic on glBalance is possible
-	balEstimated := atomic.LoadInt64(&glBalance)
-	if int64(balSpendable)-int64(balEstimated) > atomic.LoadInt64(&glTicketPrice) {
+	globalData.RLock()
+	balEstimated := globalData.balance
+	stakeDiff := globalData.stakediff
+	globalData.RUnlock()
+	if int64(balSpendable)-int64(balEstimated) > stakeDiff {
 		log.Tracef("Current balance %v is greater than estimated "+
 			"balance: %v", int64(balSpendable), int64(balEstimated))
 		fillTicketQueue = true
@@ -698,7 +704,9 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	}
 	log.Debugf("Final spendable balance at height %v for account '%s' "+
 		"after ticket purchases: %v", height, t.cfg.AccountName, balSpendable)
-	atomic.StoreInt64(&glBalance, int64(balSpendable))
+	globalData.Lock()
+	globalData.balance = int64(balSpendable)
+	globalData.Unlock()
 
 	return nil
 }
