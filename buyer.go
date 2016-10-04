@@ -432,13 +432,24 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		}
 	}
 
+	// Check for new balance credits and update ticket queue if necessary
+	// TODO: remove atomic on glBalance is possible
+	balEstimated := atomic.LoadInt64(&glBalance)
+	if int64(balSpendable)-int64(balEstimated) > atomic.LoadInt64(&glTicketPrice) {
+		log.Tracef("Current balance %v is greater than estimated "+
+			"balance: %v", int64(balSpendable), int64(balEstimated))
+		fillTicketQueue = true
+	}
+
 	// This is the main portion that handles filling up the
 	// queue of tickets to purchase (t.toBuyDiffPeriod).
 	if fillTicketQueue {
 		// Calculate how many tickets we could possibly buy
-		// at this difficulty.
+		// at this difficulty. Adjust for already purchased tickets
+		// in case of new balance credits.
 		curPrice := nextStakeDiff
-		couldBuy := math.Floor(balSpendable.ToCoin() / nextStakeDiff.ToCoin())
+		balSpent := float64(t.purchasedDiffPeriod) * nextStakeDiff.ToCoin()
+		couldBuy := math.Floor((balSpendable.ToCoin() + balSpent) / nextStakeDiff.ToCoin())
 
 		// Calculate the remaining tickets that could possibly be
 		// mined in the current window. If couldBuy is greater than
