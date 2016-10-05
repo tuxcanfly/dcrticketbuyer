@@ -7,7 +7,6 @@ import:
   - chaincfg/chainhash
   - dcrjson
 - package: github.com/decred/dcrrpcclient
-  version: 103ed11be3a7035554d3925fbfaa67742641510f
 - package: github.com/decred/dcrutil
 - package: github.com/jessevdk/go-flags
   version: 1679536dcc895411a9f5848d9a0250be7856448c

@@ -1,5 +1,5 @@
-hash: 197aca5d37017e0b4e7d39430c5e01f95a85c47cc95ea10bc8bee40fafe211e4
-updated: 2016-08-29T14:10:43.408430312-04:00
+hash: 667faadd20fe51ffee0354354d8bdac9402867a609313e31a0529ae65dc9c71c
+updated: 2016-10-05T20:25:12.617035534Z
 imports:
 - name: github.com/btcsuite/btclog
   version: 73889fb79bd687870312b6e40effcecffbd57d30
@@ -20,24 +20,24 @@ imports:
 - name: github.com/decred/blake256
   version: a840e32d7c31fe2e0218607334cb120a683951a4
 - name: github.com/decred/dcrd
-  version: 99b7aadb855d0b964e73054cedcc2bc1d0be208e
+  version: 4c838e82b5110af8b69b34a81e2cbc224e5888fa
   subpackages:
+  - chaincfg/chainhash
+  - dcrjson
+  - wire
   - chaincfg
   - chaincfg/chainec
-  - chaincfg/chainhash
   - dcrec/edwards
   - dcrec/secp256k1
   - dcrec/secp256k1/schnorr
-  - dcrjson
-  - wire
 - name: github.com/decred/dcrrpcclient
-  version: 103ed11be3a7035554d3925fbfaa67742641510f
+  version: 0f562bb540de12dfd5248aee87063eaa4792705f
 - name: github.com/decred/dcrutil
-  version: 4fc91a08eea88e74539d42d6301fd298b9bd8230
+  version: 0484582bf5503574d824f110e836a8c48aa60c8c
   subpackages:
   - base58
 - name: github.com/decred/dcrwallet
-  version: 59f8489eaf540d3ab4b3c70185b997349205bcdc
+  version: 26387c77284efc75ffe51ab01383e2514b6cbd35
   subpackages:
   - netparams
 - name: github.com/decred/ed25519
@@ -46,4 +46,4 @@ imports:
   - edwards25519
 - name: github.com/jessevdk/go-flags
   version: 1679536dcc895411a9f5848d9a0250be7856448c
-testImports: []
+devImports: []
