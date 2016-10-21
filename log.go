@@ -10,6 +10,7 @@ import (
 
 	"github.com/btcsuite/btclog"
 	"github.com/btcsuite/seelog"
+	"github.com/decred/dcrticketbuyer/ticketbuyer"
 )
 
 // Loggers per subsytem.  Note that backendLog is a seelog logger that all of
@@ -19,6 +20,7 @@ import (
 var (
 	backendLog = seelog.Disabled
 	log        = btclog.Disabled
+	tkbyLog    = btclog.Disabled
 	daemonLog  = btclog.Disabled
 	walletLog  = btclog.Disabled
 	clientLog  = btclog.Disabled
@@ -26,7 +28,7 @@ var (
 
 // subsystemLoggers maps each subsystem identifier to its associated logger.
 var subsystemLoggers = map[string]btclog.Logger{
-	"TKBY": log,
+	"TKBY": tkbyLog,
 	"DCRD": daemonLog,
 	"DCRW": walletLog,
 	"RPCC": clientLog,
@@ -58,7 +60,8 @@ func useLogger(subsystemID string, logger btclog.Logger) {
 
 	switch subsystemID {
 	case "TKBY":
-		log = logger
+		tkbyLog = logger
+		ticketbuyer.UseLogger(logger)
 	case "DCRD":
 		daemonLog = logger
 	case "DCRW":

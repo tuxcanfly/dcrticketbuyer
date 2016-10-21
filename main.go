@@ -16,6 +16,7 @@ import (
 
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
+	"github.com/decred/dcrticketbuyer/ticketbuyer"
 	"github.com/decred/dcrutil"
 )
 
@@ -115,7 +116,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	log.Debugf("Attempting to connect to dcrd RPC %s as user %s "+
+	tkbyLog.Debugf("Attempting to connect to dcrd RPC %s as user %s "+
 		"using certificate located in %s",
 		cfg.DcrdServ, cfg.DcrdUser, cfg.DcrdCert)
 	connCfgDaemon := &dcrrpcclient.ConnConfig{
@@ -156,7 +157,7 @@ func main() {
 		Certificates: dcrwCerts,
 		DisableTLS:   cfg.DisableClientTLS,
 	}
-	log.Debugf("Attempting to connect to dcrwallet RPC %s as user %s "+
+	tkbyLog.Debugf("Attempting to connect to dcrwallet RPC %s as user %s "+
 		"using certificate located in %s",
 		cfg.DcrwServ, cfg.DcrwUser, cfg.DcrwCert)
 	dcrwClient, err := dcrrpcclient.New(connCfgWallet, nil)
@@ -171,11 +172,11 @@ func main() {
 		os.Exit(1)
 	}
 	if !wi.DaemonConnected {
-		log.Warnf("Wallet was not connected to a daemon at start up! " +
+		tkbyLog.Warnf("Wallet was not connected to a daemon at start up! " +
 			"Please ensure wallet has proper connectivity.")
 	}
 	if !wi.Unlocked {
-		log.Warnf("Wallet is not unlocked! You will need to unlock " +
+		tkbyLog.Warnf("Wallet is not unlocked! You will need to unlock " +
 			"wallet for tickets to be purchased.")
 	}
 
@@ -194,7 +195,30 @@ func main() {
 		}
 	}()
 
-	purchaser, err := newTicketPurchaser(cfg, dcrdClient, dcrwClient)
+	purchaser, err := ticketbuyer.NewTicketPurchaser(&ticketbuyer.Config{
+		AccountName:        cfg.AccountName,
+		AvgPriceMode:       cfg.AvgPriceMode,
+		AvgPriceVWAPDelta:  cfg.AvgPriceVWAPDelta,
+		BalanceToMaintain:  cfg.BalanceToMaintain,
+		BlocksToAvg:        cfg.BlocksToAvg,
+		DontWaitForTickets: cfg.DontWaitForTickets,
+		ExpiryDelta:        cfg.ExpiryDelta,
+		FeeSource:          cfg.FeeSource,
+		FeeTargetScaling:   cfg.FeeTargetScaling,
+		HighPricePenalty:   cfg.HighPricePenalty,
+		MinFee:             cfg.MinFee,
+		MinPriceScale:      cfg.MinPriceScale,
+		MaxFee:             cfg.MaxFee,
+		MaxPerBlock:        cfg.MaxPerBlock,
+		MaxPriceAbsolute:   cfg.MaxPriceAbsolute,
+		MaxPriceScale:      cfg.MaxPriceScale,
+		MaxInMempool:       cfg.MaxInMempool,
+		PoolAddress:        cfg.PoolAddress,
+		PoolFees:           cfg.PoolFees,
+		PriceTarget:        cfg.PriceTarget,
+		TicketAddress:      cfg.TicketAddress,
+		TxFee:              cfg.TxFee,
+	}, dcrdClient, dcrwClient, activeNet.Params)
 	if err != nil {
 		fmt.Printf("Failed to start purchaser: %s\n", err.Error())
 		os.Exit(1)
@@ -203,12 +227,12 @@ func main() {
 	wsm := newPurchaseManager(purchaser, connectChan, quit)
 	go wsm.blockConnectedHandler()
 
-	log.Infof("Daemon and wallet successfully connected, beginning " +
+	tkbyLog.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	err = wsm.purchaser.purchase(atomic.LoadInt64(&glChainHeight))
+	err = purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
 	if err != nil {
-		log.Errorf("Failed to purchase tickets this round: %s",
+		tkbyLog.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())
 	}
 
@@ -221,7 +245,7 @@ func main() {
 			http.Handle("/csvdata/", http.StripPrefix("/csvdata/", http.FileServer(http.Dir(cfg.DataDir))))
 			err := http.ListenAndServe(cfg.HTTPSvrBind+":"+port, nil)
 			if err != nil {
-				log.Errorf("Failed to bind http server: %s", err.Error())
+				tkbyLog.Errorf("Failed to bind http server: %s", err.Error())
 			}
 		}()
 	}

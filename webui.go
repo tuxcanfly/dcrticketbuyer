@@ -107,7 +107,7 @@ func initCsvFiles() error {
 		missing = true
 	}
 	if !missing {
-		log.Tracef("HTTP server CSV files already exist, loading and continuing " +
+		tkbyLog.Tracef("HTTP server CSV files already exist, loading and continuing " +
 			"from them")
 		return nil
 	}
