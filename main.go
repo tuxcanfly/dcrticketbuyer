@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -12,9 +13,8 @@ import (
 	"os/signal"
 	"strconv"
 	"sync/atomic"
-	"time"
 
-	"github.com/decred/dcrd/chaincfg/chainhash"
+	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
 )
@@ -95,9 +95,14 @@ func main() {
 	connectChan := make(chan int64, blockConnChanBuffer)
 	quit := make(chan struct{})
 	ntfnHandlersDaemon := dcrrpcclient.NotificationHandlers{
-		OnBlockConnected: func(hash *chainhash.Hash, height int32,
-			time time.Time, vb uint16) {
-			connectChan <- int64(height)
+		OnBlockConnected: func(serializedBlockHeader []byte, transactions [][]byte) {
+			var blockHeader wire.BlockHeader
+			err := blockHeader.Deserialize(bytes.NewReader(serializedBlockHeader))
+			if err != nil {
+				log.Errorf("Failed to deserialize block header: %v", err.Error())
+				return
+			}
+			connectChan <- int64(blockHeader.Height)
 		},
 	}
 
