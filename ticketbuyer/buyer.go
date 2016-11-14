@@ -330,6 +330,9 @@ func (t *TicketPurchaser) Purchase(height int64) error {
 	}
 	log.Debugf("Current spendable balance at height %v for account '%s': %v",
 		height, t.cfg.AccountName, balSpendable)
+	if t.balEstimated == 0 {
+		t.balEstimated = balSpendable
+	}
 
 	// Check for new balance credits and update ticket queue if necessary
 	if int64(balSpendable)-int64(t.balEstimated) > t.ticketPrice {
