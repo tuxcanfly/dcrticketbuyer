@@ -195,7 +195,7 @@ func main() {
 		}
 	}()
 
-	purchaser, err := ticketbuyer.NewTicketPurchaser(&ticketbuyer.Config{
+	ticketbuyerCfg := &ticketbuyer.Config{
 		AccountName:        cfg.AccountName,
 		AvgPriceMode:       cfg.AvgPriceMode,
 		AvgPriceVWAPDelta:  cfg.AvgPriceVWAPDelta,
@@ -218,7 +218,9 @@ func main() {
 		PriceTarget:        cfg.PriceTarget,
 		TicketAddress:      cfg.TicketAddress,
 		TxFee:              cfg.TxFee,
-	}, dcrdClient, dcrwClient, activeNet.Params)
+	}
+	purchaser, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg,
+		dcrdClient, dcrwClient, activeNet.Params)
 	if err != nil {
 		fmt.Printf("Failed to start purchaser: %s\n", err.Error())
 		os.Exit(1)
