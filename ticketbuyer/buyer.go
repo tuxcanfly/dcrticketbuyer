@@ -81,6 +81,9 @@ type Config struct {
 	PriceTarget        float64
 	TicketAddress      string
 	TxFee              float64
+
+	PrevToBuyDiffPeriod int
+	PrevToBuyHeight     int
 }
 
 // TicketPurchaser is the main handler for purchasing tickets. It decides
@@ -104,6 +107,8 @@ type TicketPurchaser struct {
 	idxDiffPeriod       int          // Relative block index within the difficulty period
 	toBuyDiffPeriod     int          // Number to buy in this period
 	purchasedDiffPeriod int          // Number already bought in this period
+	prevToBuyDiffPeriod int          // Number of tickets to buy this period from a previous instance
+	prevToBuyHeight     int          // The height from the last time buy diff period was recorded
 	maintainMaxPrice    bool         // Flag for maximum price manipulation
 	maintainMinPrice    bool         // Flag for minimum price manipulation
 	useMedian           bool         // Flag for using median for ticket fees
@@ -154,18 +159,20 @@ func NewTicketPurchaser(cfg *Config,
 	}
 
 	return &TicketPurchaser{
-		cfg:              cfg,
-		activeNet:        activeNet,
-		dcrdChainSvr:     dcrdChainSvr,
-		dcrwChainSvr:     dcrwChainSvr,
-		firstStart:       true,
-		ticketAddress:    ticketAddress,
-		poolAddress:      poolAddress,
-		maintainMaxPrice: maintainMaxPrice,
-		maintainMinPrice: maintainMinPrice,
-		useMedian:        cfg.FeeSource == useMedianStr,
-		priceMode:        priceMode,
-		heightCheck:      make(map[int64]struct{}),
+		cfg:                 cfg,
+		activeNet:           activeNet,
+		dcrdChainSvr:        dcrdChainSvr,
+		dcrwChainSvr:        dcrwChainSvr,
+		firstStart:          true,
+		ticketAddress:       ticketAddress,
+		poolAddress:         poolAddress,
+		maintainMaxPrice:    maintainMaxPrice,
+		maintainMinPrice:    maintainMinPrice,
+		useMedian:           cfg.FeeSource == useMedianStr,
+		priceMode:           priceMode,
+		heightCheck:         make(map[int64]struct{}),
+		prevToBuyDiffPeriod: cfg.PrevToBuyDiffPeriod,
+		prevToBuyHeight:     cfg.PrevToBuyHeight,
 	}, nil
 }
 
@@ -332,6 +339,21 @@ func (t *TicketPurchaser) Purchase(height int64) error {
 		height, t.cfg.AccountName, balSpendable)
 	if t.balEstimated == 0 {
 		t.balEstimated = balSpendable
+	}
+
+	// Checking to see if previous amount buy tickets and height are set,
+	// then check to make sure that it was from the same current stake
+	// diff window.
+	if t.prevToBuyDiffPeriod != 0 && t.prevToBuyHeight != 0 {
+		prevToBuyWindow := int(t.prevToBuyHeight / int(winSize))
+		if t.windowPeriod == prevToBuyWindow {
+			log.Debugf("Previous tickets to buy amount for this "+
+				"window was found. Using %v for buy ticket amount.",
+				t.prevToBuyDiffPeriod)
+			fillTicketQueue = false
+			t.toBuyDiffPeriod = t.prevToBuyDiffPeriod
+			t.prevToBuyDiffPeriod = 0
+		}
 	}
 
 	// Check for new balance credits and update ticket queue if necessary
