@@ -275,7 +275,7 @@ func main() {
 	}
 
 	wsm := newPurchaseManager(purchaser, connectChan, quit)
-	go wsm.blockConnectedHandler()
+	go wsm.blockConnectedHandler(cfg.HTTPSvrPort, dcrdClient)
 
 	tkbyLog.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
