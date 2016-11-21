@@ -76,11 +76,21 @@ out:
 				}()
 			}
 
-			err := p.purchaser.Purchase(height)
+			pInfo, err := p.purchaser.Purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
 					err.Error())
 			}
+			csvData.tpAverage = pInfo.TpAverage
+			csvData.tpCurrent = pInfo.TpCurrent
+			csvData.tpNext = pInfo.TpNext
+			csvData.tpMaxScale = pInfo.TpMaxScale
+			csvData.tpMinScale = pInfo.TpMinScale
+			csvData.leftWindow = pInfo.LeftWindow
+			csvData.tnOwn = pInfo.TnOwn
+			csvData.tfOwn = pInfo.TfOwn
+			csvData.purchased = pInfo.Purchased
+
 		// TODO Poll every couple minute to check if connected;
 		// if not, try to reconnect.
 		case <-p.quit:

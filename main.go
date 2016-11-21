@@ -280,7 +280,7 @@ func main() {
 	tkbyLog.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	err = purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
+	_, err = purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
 	if err != nil {
 		tkbyLog.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())
