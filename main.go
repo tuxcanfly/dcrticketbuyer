@@ -275,16 +275,19 @@ func main() {
 	}
 
 	wsm := newPurchaseManager(purchaser, connectChan, quit)
-	go wsm.blockConnectedHandler(cfg.HTTPSvrPort, dcrdClient)
+	go wsm.blockConnectedHandler(func(pInfo *ticketbuyer.PurchaseInfo) {
+		writePurchaseInfo(pInfo, dcrdClient)
+	})
 
 	tkbyLog.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	_, err = purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
+	pInfo, err := purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
 	if err != nil {
 		tkbyLog.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())
 	}
+	writePurchaseInfo(pInfo, dcrdClient)
 
 	// If the HTTP server is enabled, spin it up and begin
 	// displaying the front page locally.

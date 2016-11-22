@@ -179,6 +179,7 @@ func NewTicketPurchaser(cfg *Config,
 
 // PurchaseInfo is the information related to the ticket purchase.
 type PurchaseInfo struct {
+	Height     int64
 	TpAverage  float64
 	TpCurrent  float64
 	TpNext     float64
@@ -194,7 +195,7 @@ type PurchaseInfo struct {
 // TODO Not make this an inlined pile of crap.
 func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 
-	pInfo := &PurchaseInfo{}
+	pInfo := &PurchaseInfo{Height: height}
 	// Check to make sure that the current height has not already been seen
 	// for a reorg or a fork
 	if _, exists := t.heightCheck[height]; exists {

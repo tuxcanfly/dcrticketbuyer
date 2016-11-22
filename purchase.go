@@ -27,49 +27,17 @@ func newPurchaseManager(purchaser *ticketbuyer.TicketPurchaser,
 	}
 }
 
+// purchasedFn is a callback invoked after purchase.
+type purchasedFn func(pInfo *ticketbuyer.PurchaseInfo)
+
 // blockConnectedHandler handles block connected notifications, which trigger
 // ticket purchases.
-func (p *purchaseManager) blockConnectedHandler(httpSvrPort int, dcrdChainSvr *dcrrpcclient.Client) {
+func (p *purchaseManager) blockConnectedHandler(fn purchasedFn) {
 out:
 	for {
 		select {
 		case height := <-p.blockConnectedChan:
 			log.Infof("Block height %v connected", height)
-
-			// Initialize webserver update data. If the webserver is
-			// enabled, defer a function that writes this data to the
-			// disk.
-			var csvData csvUpdateData
-			csvData.height = height
-
-			if httpSvrPort != 0 {
-				// Write ticket fee info for the current block to the
-				// CSV update data.
-				oneBlock := uint32(1)
-				info, err := dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
-				if err != nil {
-					log.Errorf("Failed to fetch all mempool tickets: %s",
-						err.Error())
-					return
-				}
-				csvData.tfMin = info.FeeInfoBlocks[0].Min
-				csvData.tfMax = info.FeeInfoBlocks[0].Max
-				csvData.tfMedian = info.FeeInfoBlocks[0].Median
-				csvData.tfMean = info.FeeInfoBlocks[0].Mean
-
-				// The expensive call to fetch all tickets in the mempool
-				// is here.
-				tfi, err := dcrdChainSvr.TicketFeeInfo(&zeroUint32, &zeroUint32)
-				if err != nil {
-					log.Errorf("Failed to fetch all mempool tickets: %s",
-						err.Error())
-					return
-				}
-
-				all := int(tfi.FeeInfoMempool.Number)
-				csvData.tnAll = all
-
-			}
 
 			pInfo, err := p.purchaser.Purchase(height)
 			if err != nil {
@@ -77,21 +45,7 @@ out:
 					err.Error())
 				return
 			}
-			csvData.tpAverage = pInfo.TpAverage
-			csvData.tpCurrent = pInfo.TpCurrent
-			csvData.tpNext = pInfo.TpNext
-			csvData.tpMaxScale = pInfo.TpMaxScale
-			csvData.tpMinScale = pInfo.TpMinScale
-			csvData.leftWindow = pInfo.LeftWindow
-			csvData.tnOwn = pInfo.TnOwn
-			csvData.tfOwn = pInfo.TfOwn
-			csvData.purchased = pInfo.Purchased
-			err = writeToCsvFiles(csvData)
-			if err != nil {
-				log.Errorf("Failed to write CSV graph data: %s",
-					err.Error())
-				return
-			}
+			fn(pInfo)
 
 		// TODO Poll every couple minute to check if connected;
 		// if not, try to reconnect.
@@ -99,4 +53,57 @@ out:
 			break out
 		}
 	}
+}
+
+func writePurchaseInfo(pInfo *ticketbuyer.PurchaseInfo, dcrdChainSvr *dcrrpcclient.Client) {
+	// Initialize webserver update data.
+	var csvData csvUpdateData
+
+	// Write ticket fee info for the current block to the
+	// CSV update data.
+	oneBlock := uint32(1)
+	info, err := dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
+	if err != nil {
+		log.Errorf("Failed to fetch all mempool tickets: %s",
+			err.Error())
+		return
+	}
+	csvData.tfMin = info.FeeInfoBlocks[0].Min
+	csvData.tfMax = info.FeeInfoBlocks[0].Max
+	csvData.tfMedian = info.FeeInfoBlocks[0].Median
+	csvData.tfMean = info.FeeInfoBlocks[0].Mean
+
+	// The expensive call to fetch all tickets in the mempool
+	// is here.
+	tfi, err := dcrdChainSvr.TicketFeeInfo(&zeroUint32, &zeroUint32)
+	if err != nil {
+		log.Errorf("Failed to fetch all mempool tickets: %s",
+			err.Error())
+		return
+	}
+
+	all := int(tfi.FeeInfoMempool.Number)
+	csvData.tnAll = all
+
+	csvData.height = pInfo.Height
+	csvData.tpAverage = pInfo.TpAverage
+	csvData.tpCurrent = pInfo.TpCurrent
+	csvData.tpNext = pInfo.TpNext
+	csvData.tpMaxScale = pInfo.TpMaxScale
+	csvData.tpMinScale = pInfo.TpMinScale
+	csvData.leftWindow = pInfo.LeftWindow
+	csvData.tnOwn = pInfo.TnOwn
+	csvData.tfOwn = pInfo.TfOwn
+	csvData.purchased = pInfo.Purchased
+
+	//  Defer a function that writes this data to the
+	//  disk.
+	defer func() {
+		err = writeToCsvFiles(csvData)
+		if err != nil {
+			log.Errorf("Failed to write CSV graph data: %s",
+				err.Error())
+			return
+		}
+	}()
 }
