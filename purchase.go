@@ -50,6 +50,7 @@ out:
 				if err != nil {
 					log.Errorf("Failed to fetch all mempool tickets: %s",
 						err.Error())
+					return
 				}
 				csvData.tfMin = info.FeeInfoBlocks[0].Min
 				csvData.tfMax = info.FeeInfoBlocks[0].Max
@@ -62,24 +63,19 @@ out:
 				if err != nil {
 					log.Errorf("Failed to fetch all mempool tickets: %s",
 						err.Error())
+					return
 				}
 
 				all := int(tfi.FeeInfoMempool.Number)
 				csvData.tnAll = all
 
-				defer func() {
-					err := writeToCsvFiles(csvData)
-					if err != nil {
-						log.Errorf("Failed to write CSV graph data: %s",
-							err.Error())
-					}
-				}()
 			}
 
 			pInfo, err := p.purchaser.Purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
 					err.Error())
+				return
 			}
 			csvData.tpAverage = pInfo.TpAverage
 			csvData.tpCurrent = pInfo.TpCurrent
@@ -90,6 +86,12 @@ out:
 			csvData.tnOwn = pInfo.TnOwn
 			csvData.tfOwn = pInfo.TfOwn
 			csvData.purchased = pInfo.Purchased
+			err = writeToCsvFiles(csvData)
+			if err != nil {
+				log.Errorf("Failed to write CSV graph data: %s",
+					err.Error())
+				return
+			}
 
 		// TODO Poll every couple minute to check if connected;
 		// if not, try to reconnect.

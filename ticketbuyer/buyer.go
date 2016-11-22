@@ -194,7 +194,7 @@ type PurchaseInfo struct {
 // TODO Not make this an inlined pile of crap.
 func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 
-	var pInfo *PurchaseInfo
+	pInfo := &PurchaseInfo{}
 	// Check to make sure that the current height has not already been seen
 	// for a reorg or a fork
 	if _, exists := t.heightCheck[height]; exists {
