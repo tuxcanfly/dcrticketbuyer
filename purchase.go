@@ -43,7 +43,7 @@ out:
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
 					err.Error())
-				return
+				continue
 			}
 			fn(pInfo)
 
