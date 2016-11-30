@@ -180,11 +180,11 @@ func NewTicketPurchaser(cfg *Config,
 // PurchaseInfo is the information related to the ticket purchase.
 type PurchaseInfo struct {
 	Height     int64
-	TpAverage  float64
-	TpCurrent  float64
-	TpNext     float64
-	TpMaxScale float64
-	TpMinScale float64
+	Average    float64
+	Current    float64
+	Next       float64
+	MaxScale   float64
+	MinScale   float64
 	LeftWindow int
 	TnOwn      int
 	TfOwn      float64
@@ -304,7 +304,7 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 	}
 	avgPrice := avgPriceAmt.ToCoin()
 	log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
-	pInfo.TpAverage = avgPrice
+	pInfo.Average = avgPrice
 
 	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
 	if err != nil {
@@ -314,14 +314,14 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 	if err != nil {
 		return pInfo, err
 	}
-	pInfo.TpCurrent = stakeDiffs.NextStakeDifficulty
+	pInfo.Current = stakeDiffs.NextStakeDifficulty
 	t.ticketPrice = int64(nextStakeDiff)
 
 	sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
 	if err != nil {
 		return pInfo, err
 	}
-	pInfo.TpNext = sDiffEsts.Expected
+	pInfo.Next = sDiffEsts.Expected
 
 	// Scale the average price according to the configuration parameters
 	// to find minimum and maximum prices for users that are electing to
@@ -338,7 +338,7 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 		log.Tracef("The maximum price to maintain for this round is set to %v",
 			maxPriceScaledAmt)
 	}
-	pInfo.TpMaxScale = maxPriceScaledAmt.ToCoin()
+	pInfo.MaxScale = maxPriceScaledAmt.ToCoin()
 	minPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MinPriceScale * avgPrice)
 	if err != nil {
 		return pInfo, err
@@ -347,7 +347,7 @@ func (t *TicketPurchaser) Purchase(height int64) (*PurchaseInfo, error) {
 		log.Tracef("The minimum price to maintain for this round is set to %v",
 			minPriceScaledAmt)
 	}
-	pInfo.TpMinScale = minPriceScaledAmt.ToCoin()
+	pInfo.MinScale = minPriceScaledAmt.ToCoin()
 
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
 		0, "spendable")

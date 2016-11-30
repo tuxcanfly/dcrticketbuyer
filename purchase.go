@@ -86,11 +86,11 @@ func writePurchaseInfo(pInfo *ticketbuyer.PurchaseInfo, dcrdChainSvr *dcrrpcclie
 	csvData.tnAll = all
 
 	csvData.height = pInfo.Height
-	csvData.tpAverage = pInfo.TpAverage
-	csvData.tpCurrent = pInfo.TpCurrent
-	csvData.tpNext = pInfo.TpNext
-	csvData.tpMaxScale = pInfo.TpMaxScale
-	csvData.tpMinScale = pInfo.TpMinScale
+	csvData.tpAverage = pInfo.Average
+	csvData.tpCurrent = pInfo.Current
+	csvData.tpNext = pInfo.Next
+	csvData.tpMaxScale = pInfo.MaxScale
+	csvData.tpMinScale = pInfo.MinScale
 	csvData.leftWindow = pInfo.LeftWindow
 	csvData.tnOwn = pInfo.TnOwn
 	csvData.tfOwn = pInfo.TfOwn
