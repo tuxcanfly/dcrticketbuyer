@@ -14,15 +14,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/decred/dcrutil"
 )
-
-// csvWriteMutex is the global write mutex for files to write for the HTTP
-// server.
-var csvWriteMutex sync.Mutex
 
 // csvTicketPricesFn is the filename for the CSV of the ticket prices.
 var csvTicketPricesFn = "prices.csv"
@@ -193,9 +188,6 @@ func strFeesCsv(height int64, min, max, median, mean, own float64) string {
 
 // writeToCsvFiles writes the update data for the CSVs to their respective files.
 func writeToCsvFiles(csvUD csvUpdateData) error {
-	csvWriteMutex.Lock()
-	defer csvWriteMutex.Unlock()
-
 	height := csvUD.height
 
 	f, err := os.OpenFile(filepath.Join(csvPath, csvTicketPricesFn),
@@ -344,9 +336,6 @@ func addDimpleChart(chartName, title, dataLoc, xItem, yItem,
 // protected under the mutex because we don't want a race to occur where the
 // files are being written to when they're attempting to be read below.
 func writeMainGraphs(w http.ResponseWriter, r *http.Request) {
-	csvWriteMutex.Lock()
-	defer csvWriteMutex.Unlock()
-
 	// Load the chainHeight for use in filtering the graphs.
 	height := atomic.LoadInt64(&glChainHeight)
 	balance := atomic.LoadInt64(&glBalance)
