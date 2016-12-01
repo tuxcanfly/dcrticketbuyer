@@ -6,15 +6,19 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
+	"github.com/decred/dcrticketbuyer/ticketbuyer"
 	"github.com/decred/dcrutil"
 )
 
@@ -173,7 +177,78 @@ func main() {
 		}
 	}()
 
-	purchaser, err := newTicketPurchaser(cfg, dcrdClient, dcrwClient)
+	var prevToBuyDiffPeriod, prevToBuyHeight int
+	// Here we attempt to load purchased.csv from the webui dir.  This
+	// allows us to attempt to see if there have been previous ticketbuyer
+	// instances during the current stakediff window and reuse the
+	// previously tracked amount of tickets to purchase during that window.
+	f, err := os.OpenFile(filepath.Join(csvPath, csvPurchasedFn),
+		os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		fmt.Printf("Error opening file: %v", err)
+		os.Exit(1)
+	}
+
+	rdr := csv.NewReader(f)
+	rdr.Comma = ','
+	prevRecord := []string{}
+	for {
+		record, err := rdr.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+		}
+		prevRecord = record
+	}
+	f.Close()
+
+	// Attempt to parse last line in purchased.csv, then set previous amounts.
+	if len(prevRecord) >= 3 {
+		if prevRecord[1] == "RemainingToBuy" {
+			prevToBuyHeight, err = strconv.Atoi(prevRecord[0])
+			if err != nil {
+				log.Errorf("Could not parse last height from "+
+					"csv: %v", err)
+			}
+
+			prevToBuyDiffPeriod, err = strconv.Atoi(prevRecord[2])
+			if err != nil {
+				log.Errorf("Could not parse remaining to buy "+
+					"from csv %v", err)
+			}
+		}
+	}
+
+	ticketbuyerCfg := &ticketbuyer.Config{
+		AccountName:         cfg.AccountName,
+		AvgPriceMode:        cfg.AvgPriceMode,
+		AvgPriceVWAPDelta:   cfg.AvgPriceVWAPDelta,
+		BalanceToMaintain:   cfg.BalanceToMaintain,
+		BlocksToAvg:         cfg.BlocksToAvg,
+		DontWaitForTickets:  cfg.DontWaitForTickets,
+		ExpiryDelta:         cfg.ExpiryDelta,
+		FeeSource:           cfg.FeeSource,
+		FeeTargetScaling:    cfg.FeeTargetScaling,
+		HighPricePenalty:    cfg.HighPricePenalty,
+		MinFee:              cfg.MinFee,
+		MinPriceScale:       cfg.MinPriceScale,
+		MaxFee:              cfg.MaxFee,
+		MaxPerBlock:         cfg.MaxPerBlock,
+		MaxPriceAbsolute:    cfg.MaxPriceAbsolute,
+		MaxPriceScale:       cfg.MaxPriceScale,
+		MaxInMempool:        cfg.MaxInMempool,
+		PoolAddress:         cfg.PoolAddress,
+		PoolFees:            cfg.PoolFees,
+		PriceTarget:         cfg.PriceTarget,
+		TicketAddress:       cfg.TicketAddress,
+		TxFee:               cfg.TxFee,
+		TicketFeeInfo:       true,
+		PrevToBuyDiffPeriod: prevToBuyDiffPeriod,
+		PrevToBuyHeight:     prevToBuyHeight,
+	}
+	purchaser, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg,
+		dcrdClient, dcrwClient, activeNet.Params)
 	if err != nil {
 		fmt.Printf("Failed to start purchaser: %s\n", err.Error())
 		os.Exit(1)

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/decred/dcrticketbuyer/ticketbuyer"
 	"github.com/decred/dcrutil"
 )
 
@@ -216,8 +217,8 @@ func writeStatsCsvFile(height, balance, price int64) error {
 }
 
 // writeToCsvFiles writes the update data for the CSVs to their respective files.
-func writeToCsvFiles(csvUD *purchaseStats) error {
-	height := csvUD.height
+func writeToCsvFiles(csvUD *ticketbuyer.PurchaseStats) error {
+	height := csvUD.Height
 
 	f, err := os.OpenFile(filepath.Join(csvPath, csvTicketPricesFn),
 		os.O_APPEND|os.O_WRONLY, os.ModeAppend)
@@ -225,8 +226,8 @@ func writeToCsvFiles(csvUD *purchaseStats) error {
 		return err
 	}
 	writer := bufio.NewWriter(f)
-	str := strTicketPriceCsv(height, csvUD.tpMinScale, csvUD.tpMaxScale,
-		csvUD.tpAverage, csvUD.tpNext, csvUD.tpCurrent)
+	str := strTicketPriceCsv(height, csvUD.PriceMinScale, csvUD.PriceMaxScale,
+		csvUD.PriceAverage, csvUD.PriceNext, csvUD.PriceCurrent)
 	_, err = writer.WriteString(str)
 	if err != nil {
 		return err
@@ -246,7 +247,7 @@ func writeToCsvFiles(csvUD *purchaseStats) error {
 		return err
 	}
 	writer = bufio.NewWriter(f)
-	str = strTicketNumCsv(height, csvUD.tnAll, csvUD.tnOwn)
+	str = strTicketNumCsv(height, csvUD.MempoolAll, csvUD.MempoolOwn)
 	_, err = writer.WriteString(str)
 	if err != nil {
 		return err
@@ -266,7 +267,7 @@ func writeToCsvFiles(csvUD *purchaseStats) error {
 		return err
 	}
 	writer = bufio.NewWriter(f)
-	str = strPurchasedCsv(height, csvUD.purchased, csvUD.leftWindow)
+	str = strPurchasedCsv(height, csvUD.Purchased, csvUD.LeftWindow)
 	_, err = writer.WriteString(str)
 	if err != nil {
 		return err
@@ -286,8 +287,8 @@ func writeToCsvFiles(csvUD *purchaseStats) error {
 		return err
 	}
 	writer = bufio.NewWriter(f)
-	str = strFeesCsv(height, csvUD.tfMin, csvUD.tfMax, csvUD.tfMedian,
-		csvUD.tfMean, csvUD.tfOwn)
+	str = strFeesCsv(height, csvUD.FeeMin, csvUD.FeeMax, csvUD.FeeMedian,
+		csvUD.FeeMean, csvUD.FeeOwn)
 	_, err = writer.WriteString(str)
 	if err != nil {
 		return err

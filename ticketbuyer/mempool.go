@@ -1,5 +1,5 @@
 // helpers.go
-package main
+package ticketbuyer
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ var (
 // ownTicketsInMempool finds all the tickets owned by the user in the
 // daemon mempool. It searches for the ticket address if it is specified,
 // and otherwise uses getstakeinfo to determine this number.
-func (t *ticketPurchaser) ownTicketsInMempool() (int, error) {
+func (t *TicketPurchaser) ownTicketsInMempool() (int, error) {
 	tickets := 0
 
 	// Ticket address is specified and may not belong to our own
@@ -86,7 +86,7 @@ func (t *ticketPurchaser) ownTicketsInMempool() (int, error) {
 
 // allTicketsInMempool fetches the number of tickets currently in the memory
 // pool.
-func (t *ticketPurchaser) allTicketsInMempool() (int, error) {
+func (t *TicketPurchaser) allTicketsInMempool() (int, error) {
 	tfi, err := t.dcrdChainSvr.TicketFeeInfo(&zeroUint32, &zeroUint32)
 	if err != nil {
 		return 0, err

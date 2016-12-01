@@ -10,6 +10,7 @@ import (
 
 	"github.com/btcsuite/btclog"
 	"github.com/btcsuite/seelog"
+	"github.com/decred/dcrticketbuyer/ticketbuyer"
 )
 
 // Loggers per subsytem.  Note that backendLog is a seelog logger that all of
@@ -59,6 +60,7 @@ func useLogger(subsystemID string, logger btclog.Logger) {
 	switch subsystemID {
 	case "TKBY":
 		log = logger
+		ticketbuyer.UseLogger(logger)
 	case "DCRD":
 		daemonLog = logger
 	case "DCRW":

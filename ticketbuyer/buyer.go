@@ -2,17 +2,13 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package main
+package ticketbuyer
 
 import (
-	"encoding/csv"
 	"fmt"
-	"io"
 	"math"
-	"os"
-	"path/filepath"
-	"strconv"
 
+	"github.com/decred/dcrd/chaincfg"
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
 )
@@ -20,7 +16,9 @@ import (
 var (
 	// zeroUint32 is the zero value for a uint32.
 	zeroUint32 = uint32(0)
+)
 
+const (
 	// useMeanStr is the string indicating that the mean ticket fee
 	// should be used when determining ticket fee.
 	useMeanStr = "mean"
@@ -43,76 +41,36 @@ var (
 	useDualPriceStr = "dual"
 )
 
-// purchaseManager is the main handler of websocket notifications to
-// pass to the purchaser and internal quit notifications.
-type purchaseManager struct {
-	purchaser          *ticketPurchaser
-	blockConnectedChan chan int64
-	quit               chan struct{}
+// Config stores the configuration options for ticket buyer.
+type Config struct {
+	AccountName         string
+	AvgPriceMode        string
+	AvgPriceVWAPDelta   int
+	BalanceToMaintain   float64
+	BlocksToAvg         int
+	DontWaitForTickets  bool
+	ExpiryDelta         int
+	FeeSource           string
+	FeeTargetScaling    float64
+	HighPricePenalty    float64
+	MinFee              float64
+	MinPriceScale       float64
+	MaxFee              float64
+	MaxPerBlock         int
+	MaxPriceAbsolute    float64
+	MaxPriceScale       float64
+	MaxInMempool        int
+	PoolAddress         string
+	PoolFees            float64
+	PriceTarget         float64
+	TicketAddress       string
+	TxFee               float64
+	TicketFeeInfo       bool
+	PrevToBuyDiffPeriod int
+	PrevToBuyHeight     int
 }
 
-// newPurchaseManager creates a new purchaseManager.
-func newPurchaseManager(purchaser *ticketPurchaser,
-	blockConnChan chan int64,
-	quit chan struct{}) *purchaseManager {
-	return &purchaseManager{
-		purchaser:          purchaser,
-		blockConnectedChan: blockConnChan,
-		quit:               quit,
-	}
-}
-
-// blockConnectedHandler handles block connected notifications, which trigger
-// ticket purchases.
-func (p *purchaseManager) blockConnectedHandler() {
-out:
-	for {
-		select {
-		case height := <-p.blockConnectedChan:
-			daemonLog.Infof("Block height %v connected", height)
-			ps, err := p.purchaser.purchase(height)
-			if err != nil {
-				log.Errorf("Failed to purchase tickets this round: %s",
-					err.Error())
-			}
-
-			// Write ticket fee info for the current block to the
-			// CSV update data.
-			err = writeStatsCsvFile(ps.height, ps.bal, ps.price)
-			if err != nil {
-				log.Errorf("Failed to write purchase stats: %v", err)
-			}
-			oneBlock := uint32(1)
-			info, err := t.dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
-			if err != nil {
-				return ps, err
-			}
-			ps.tfMin = info.FeeInfoBlocks[0].Min
-			ps.tfMax = info.FeeInfoBlocks[0].Max
-			ps.tfMedian = info.FeeInfoBlocks[0].Median
-			ps.tfMean = info.FeeInfoBlocks[0].Mean
-
-			// The expensive call to fetch all tickets in the mempool
-			// is here.
-			all, err := t.allTicketsInMempool()
-			if err != nil {
-				return ps, err
-			}
-			ps.tnAll = all
-			err = writeToCsvFiles(ps)
-			if err != nil {
-				log.Errorf("Failed to write CSV graph data: %s", err)
-			}
-
-		// TODO Poll every couple minute to check if connected;
-		// if not, try to reconnect.
-		case <-p.quit:
-			break out
-		}
-	}
-}
-
-// ticketPurchaser is the main handler for purchasing tickets. It decides
+// TicketPurchaser is the main handler for purchasing tickets. It decides
 // whether or not to do so based on information obtained from daemon and
 // wallet chain servers.
 //
@@ -121,8 +79,9 @@ out:
 // reset when we enter a new difficulty period because a new block has been
 // connected that is outside the previous difficulty period. The variable
 // purchasedDiffPeriod tracks the number purchased in this period.
-type ticketPurchaser struct {
-	cfg                 *config
+type TicketPurchaser struct {
+	cfg                 *Config
+	activeNet           *chaincfg.Params
 	dcrdChainSvr        *dcrrpcclient.Client
 	dcrwChainSvr        *dcrrpcclient.Client
 	ticketAddress       dcrutil.Address
@@ -143,15 +102,16 @@ type ticketPurchaser struct {
 	ticketPrice         dcrutil.Amount
 }
 
-// newTicketPurchaser creates a new ticketPurchaser.
-func newTicketPurchaser(cfg *config,
+// NewTicketPurchaser creates a new TicketPurchaser.
+func NewTicketPurchaser(cfg *Config,
 	dcrdChainSvr *dcrrpcclient.Client,
-	dcrwChainSvr *dcrrpcclient.Client) (*ticketPurchaser, error) {
+	dcrwChainSvr *dcrrpcclient.Client,
+	activeNet *chaincfg.Params) (*TicketPurchaser, error) {
 	var ticketAddress dcrutil.Address
 	var err error
 	if cfg.TicketAddress != "" {
 		ticketAddress, err = dcrutil.DecodeAddress(cfg.TicketAddress,
-			activeNet.Params)
+			activeNet)
 		if err != nil {
 			return nil, err
 		}
@@ -182,52 +142,9 @@ func newTicketPurchaser(cfg *config,
 		priceMode = AvgPriceDualMode
 	}
 
-	// Here we attempt to load purchased.csv from the webui dir.  This
-	// allows us to attempt to see if there have been previous ticketbuyer
-	// instances during the current stakediff window and reuse the
-	// previously tracked amount of tickets to purchase during that window.
-	f, err := os.OpenFile(filepath.Join(csvPath, csvPurchasedFn),
-		os.O_RDONLY|os.O_CREATE, 0600)
-	if err != nil {
-		log.Errorf("Error opening file: %v", err)
-		return nil, err
-	}
-	defer f.Close()
-
-	rdr := csv.NewReader(f)
-	rdr.Comma = ','
-	prevRecord := []string{}
-	for {
-		record, err := rdr.Read()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-		}
-		prevRecord = record
-	}
-
-	// Attempt to parse last line in purchased.csv, then set previous amounts.
-	prevToBuyDiffPeriod := 0
-	lastHeight := 0
-	if len(prevRecord) >= 3 {
-		if prevRecord[1] == "RemainingToBuy" {
-			lastHeight, err = strconv.Atoi(prevRecord[0])
-			if err != nil {
-				log.Errorf("Could not parse last height from "+
-					"csv: %v", err)
-			}
-
-			prevToBuyDiffPeriod, err = strconv.Atoi(prevRecord[2])
-			if err != nil {
-				log.Errorf("Could not parse remaining to buy "+
-					"from csv %v", err)
-			}
-		}
-	}
-
-	return &ticketPurchaser{
+	return &TicketPurchaser{
 		cfg:                 cfg,
+		activeNet:           activeNet,
 		dcrdChainSvr:        dcrdChainSvr,
 		dcrwChainSvr:        dcrwChainSvr,
 		firstStart:          true,
@@ -238,36 +155,37 @@ func newTicketPurchaser(cfg *config,
 		useMedian:           cfg.FeeSource == useMedianStr,
 		priceMode:           priceMode,
 		heightCheck:         make(map[int64]struct{}),
-		prevToBuyDiffPeriod: prevToBuyDiffPeriod,
-		prevToBuyHeight:     lastHeight,
+		prevToBuyDiffPeriod: cfg.PrevToBuyDiffPeriod,
+		prevToBuyHeight:     cfg.PrevToBuyHeight,
 	}, nil
 }
 
-type purchaseStats struct {
-	height     int64
-	tpMinScale float64
-	tpMaxScale float64
-	tpAverage  float64
-	tpNext     float64
-	tpCurrent  float64
-	tnAll      int
-	tnOwn      int
-	purchased  int
-	leftWindow int
-	tfMin      float64
-	tfMax      float64
-	tfMedian   float64
-	tfMean     float64
-	tfOwn      float64
-	bal        int64
-	price      int64
+// Purchase stats is a collection of statistics related to the ticket purchase.
+type PurchaseStats struct {
+	Height        int64
+	PriceMinScale float64
+	PriceMaxScale float64
+	PriceAverage  float64
+	PriceNext     float64
+	PriceCurrent  float64
+	MempoolAll    int
+	MempoolOwn    int
+	Purchased     int
+	LeftWindow    int
+	FeeMin        float64
+	FeeMax        float64
+	FeeMedian     float64
+	FeeMean       float64
+	FeeOwn        float64
+	Balance       int64
+	TicketPrice   int64
 }
 
-// purchase is the main handler for purchasing tickets for the user.
+// Purchase is the main handler for purchasing tickets for the user.
 // TODO Not make this an inlined pile of crap.
-func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
+func (t *TicketPurchaser) Purchase(height int64) (*PurchaseStats, error) {
 
-	ps := &purchaseStats{height: height}
+	ps := &PurchaseStats{Height: height}
 	// Check to make sure that the current height has not already been seen
 	// for a reorg or a fork
 	if _, exists := t.heightCheck[height]; exists {
@@ -277,10 +195,30 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	}
 	t.heightCheck[height] = struct{}{}
 
+	if t.cfg.TicketFeeInfo {
+		oneBlock := uint32(1)
+		info, err := t.dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
+		if err != nil {
+			return ps, err
+		}
+		ps.FeeMin = info.FeeInfoBlocks[0].Min
+		ps.FeeMax = info.FeeInfoBlocks[0].Max
+		ps.FeeMedian = info.FeeInfoBlocks[0].Median
+		ps.FeeMean = info.FeeInfoBlocks[0].Mean
+
+		// The expensive call to fetch all tickets in the mempool
+		// is here.
+		all, err := t.allTicketsInMempool()
+		if err != nil {
+			return ps, err
+		}
+		ps.MempoolAll = all
+	}
+
 	// Just starting up, initialize our purchaser and start
 	// buying. Set the start up regular transaction fee here
 	// too.
-	winSize := activeNet.StakeDiffWindowSize
+	winSize := t.activeNet.StakeDiffWindowSize
 	fillTicketQueue := false
 	if t.firstStart {
 		t.idxDiffPeriod = int(height % winSize)
@@ -378,7 +316,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	}
 	avgPrice := avgPriceAmt.ToCoin()
 	log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
-	ps.tpAverage = avgPrice
+	ps.PriceAverage = avgPrice
 
 	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
 	if err != nil {
@@ -388,15 +326,15 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	if err != nil {
 		return ps, err
 	}
-	ps.tpCurrent = stakeDiffs.NextStakeDifficulty
+	ps.PriceCurrent = stakeDiffs.NextStakeDifficulty
 	t.ticketPrice = nextStakeDiff
-	ps.price = int64(nextStakeDiff)
+	ps.TicketPrice = int64(nextStakeDiff)
 
 	sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
 	if err != nil {
 		return ps, err
 	}
-	ps.tpNext = sDiffEsts.Expected
+	ps.PriceNext = sDiffEsts.Expected
 
 	// Scale the average price according to the configuration parameters
 	// to find minimum and maximum prices for users that are electing to
@@ -413,7 +351,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 		log.Tracef("The maximum price to maintain for this round is set to %v",
 			maxPriceScaledAmt)
 	}
-	ps.tpMaxScale = maxPriceScaledAmt.ToCoin()
+	ps.PriceMaxScale = maxPriceScaledAmt.ToCoin()
 	minPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MinPriceScale * avgPrice)
 	if err != nil {
 		return ps, err
@@ -422,7 +360,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 		log.Tracef("The minimum price to maintain for this round is set to %v",
 			minPriceScaledAmt)
 	}
-	ps.tpMinScale = minPriceScaledAmt.ToCoin()
+	ps.PriceMinScale = minPriceScaledAmt.ToCoin()
 
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
 		0, "spendable")
@@ -434,7 +372,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	if t.balEstimated == 0 {
 		t.balEstimated = balSpendable
 	}
-	ps.bal = int64(balSpendable)
+	ps.Balance = int64(balSpendable)
 
 	// Checking to see if previous amount buy tickets and height are set,
 	// then check to make sure that it was from the same current stake
@@ -477,7 +415,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 			diffPeriod = int64(t.idxDiffPeriod)
 		}
 		ticketsLeftInWindow := (winSize - diffPeriod) *
-			int64(activeNet.MaxFreshStakePerBlock)
+			int64(t.activeNet.MaxFreshStakePerBlock)
 		if couldBuy > float64(ticketsLeftInWindow) {
 			log.Debugf("The total ticket allotment left in this stakediff window is %v. "+
 				"So this wallet's possible tickets that could be bought is %v so it"+
@@ -530,7 +468,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 				curPrice, targetPrice, t.toBuyDiffPeriod)
 		}
 	}
-	ps.leftWindow = t.toBuyDiffPeriod
+	ps.LeftWindow = t.toBuyDiffPeriod
 	// Disable purchasing if the ticket price is too high based on
 	// the absolute cutoff or if the estimated ticket price is above
 	// our scaled cutoff based on the ideal ticket price.
@@ -554,7 +492,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	if err != nil {
 		return ps, err
 	}
-	ps.tnOwn = inMP
+	ps.MempoolOwn = inMP
 	if !t.cfg.DontWaitForTickets {
 		if inMP > t.cfg.MaxInMempool {
 			log.Debugf("Currently waiting for %v tickets to enter the "+
@@ -606,7 +544,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 
 	log.Debugf("Mean fee for the last blocks or window period was %v; "+
 		"this was scaled to %v", chainFee, feeToUse)
-	ps.tfOwn = feeToUse
+	ps.FeeOwn = feeToUse
 
 	// Only the maximum number of tickets at each block
 	// should be purchased, as specified by the user.
@@ -695,8 +633,8 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 		return ps, err
 	}
 	t.purchasedDiffPeriod += toBuyForBlock
-	ps.purchased = toBuyForBlock
-	ps.leftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
+	ps.Purchased = toBuyForBlock
+	ps.LeftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
 	for i := range tickets {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
 			"fees per KB used)", tickets[i], nextStakeDiff.ToCoin(),
@@ -716,7 +654,7 @@ func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 	log.Debugf("Final spendable balance at height %v for account '%s' "+
 		"after ticket purchases: %v", height, t.cfg.AccountName, balSpendable)
 	t.balEstimated = balSpendable
-	ps.bal = int64(balSpendable)
+	ps.Balance = int64(balSpendable)
 
 	return ps, nil
 }

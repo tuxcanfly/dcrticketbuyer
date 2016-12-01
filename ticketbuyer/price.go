@@ -2,7 +2,7 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package main
+package ticketbuyer
 
 import (
 	"strings"
@@ -51,7 +51,7 @@ func containsVWAPHeightOffsetError(err error) bool {
 
 // calcAverageTicketPrice calculates the average price of a ticket based on
 // the parameters set by the user.
-func (t *ticketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, error) {
+func (t *TicketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, error) {
 	// Pull and store relevant data about the blockchain. Calculate a
 	// "reasonable" ticket price by using the VWAP for the last delta many
 	// blocks or the average price of all tickets in the ticket pool.
