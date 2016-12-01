@@ -26,42 +26,6 @@ const (
 
 var activeNet = &netparams.MainNetParams
 
-const (
-	// VWAPMode indicates to use only the VWAP.
-	AvgPriceVWAPMode = iota
-
-	// PoolMode indicates to use only the average
-	// price in the ticket pool.
-	AvgPricePoolMode
-
-	// DualMode indicates to use bothe the VWAP and
-	// the average pool price.
-	AvgPriceDualMode
-)
-
-var (
-	// useMeanStr is the string indicating that the mean ticket fee
-	// should be used when determining ticket fee.
-	useMeanStr = "mean"
-
-	// useMedianStr is the string indicating that the median ticket fee
-	// should be used when determining ticket fee.
-	useMedianStr = "median"
-
-	// useVWAPStr is the string indicating that the volume
-	// weighted average price should be used as the price target.
-	useVWAPStr = "vwap"
-
-	// usePoolPriceStr is the string indicating that the ticket pool
-	// price should be used as the price target.
-	usePoolPriceStr = "pool"
-
-	// useDualPriceStr is the string indicating that a combination of the
-	// ticket pool price and the ticket VWAP should be used as the
-	// price target.
-	useDualPriceStr = "dual"
-)
-
 // csvPath is the default path for web server CSV files to be
 // held in.  It is set to the DataDir after loading the
 // configuration.
@@ -353,7 +317,7 @@ func loadConfig() (*config, error) {
 	// succeeds.  This prevents the warning on help messages and invalid
 	// options.
 	if configFileError != nil {
-		tkbyLog.Warnf("%v", configFileError)
+		log.Warnf("%v", configFileError)
 	}
 
 	// Create the home directory if it doesn't already exist.

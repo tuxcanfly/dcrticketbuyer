@@ -6,20 +6,16 @@ package main
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"sync/atomic"
 
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
-	"github.com/decred/dcrticketbuyer/ticketbuyer"
 	"github.com/decred/dcrutil"
 )
 
@@ -119,7 +115,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	tkbyLog.Debugf("Attempting to connect to dcrd RPC %s as user %s "+
+	log.Debugf("Attempting to connect to dcrd RPC %s as user %s "+
 		"using certificate located in %s",
 		cfg.DcrdServ, cfg.DcrdUser, cfg.DcrdCert)
 	connCfgDaemon := &dcrrpcclient.ConnConfig{
@@ -160,7 +156,7 @@ func main() {
 		Certificates: dcrwCerts,
 		DisableTLS:   cfg.DisableClientTLS,
 	}
-	tkbyLog.Debugf("Attempting to connect to dcrwallet RPC %s as user %s "+
+	log.Debugf("Attempting to connect to dcrwallet RPC %s as user %s "+
 		"using certificate located in %s",
 		cfg.DcrwServ, cfg.DcrwUser, cfg.DcrwCert)
 	dcrwClient, err := dcrrpcclient.New(connCfgWallet, nil)
@@ -175,11 +171,11 @@ func main() {
 		os.Exit(1)
 	}
 	if !wi.DaemonConnected {
-		tkbyLog.Warnf("Wallet was not connected to a daemon at start up! " +
+		log.Warnf("Wallet was not connected to a daemon at start up! " +
 			"Please ensure wallet has proper connectivity.")
 	}
 	if !wi.Unlocked {
-		tkbyLog.Warnf("Wallet is not unlocked! You will need to unlock " +
+		log.Warnf("Wallet is not unlocked! You will need to unlock " +
 			"wallet for tickets to be purchased.")
 	}
 
@@ -198,96 +194,23 @@ func main() {
 		}
 	}()
 
-	var prevToBuyDiffPeriod, prevToBuyHeight int
-	// Here we attempt to load purchased.csv from the webui dir.  This
-	// allows us to attempt to see if there have been previous ticketbuyer
-	// instances during the current stakediff window and reuse the
-	// previously tracked amount of tickets to purchase during that window.
-	f, err := os.OpenFile(filepath.Join(csvPath, csvPurchasedFn),
-		os.O_RDONLY|os.O_CREATE, 0600)
-	if err != nil {
-		fmt.Printf("Error opening file: %v", err)
-		os.Exit(1)
-	}
-
-	rdr := csv.NewReader(f)
-	rdr.Comma = ','
-	prevRecord := []string{}
-	for {
-		record, err := rdr.Read()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-		}
-		prevRecord = record
-	}
-	f.Close()
-
-	// Attempt to parse last line in purchased.csv, then set previous amounts.
-	if len(prevRecord) >= 3 {
-		if prevRecord[1] == "RemainingToBuy" {
-			prevToBuyHeight, err = strconv.Atoi(prevRecord[0])
-			if err != nil {
-				log.Errorf("Could not parse last height from "+
-					"csv: %v", err)
-			}
-
-			prevToBuyDiffPeriod, err = strconv.Atoi(prevRecord[2])
-			if err != nil {
-				log.Errorf("Could not parse remaining to buy "+
-					"from csv %v", err)
-			}
-		}
-	}
-
-	ticketbuyerCfg := &ticketbuyer.Config{
-		AccountName:         cfg.AccountName,
-		AvgPriceMode:        cfg.AvgPriceMode,
-		AvgPriceVWAPDelta:   cfg.AvgPriceVWAPDelta,
-		BalanceToMaintain:   cfg.BalanceToMaintain,
-		BlocksToAvg:         cfg.BlocksToAvg,
-		DontWaitForTickets:  cfg.DontWaitForTickets,
-		ExpiryDelta:         cfg.ExpiryDelta,
-		FeeSource:           cfg.FeeSource,
-		FeeTargetScaling:    cfg.FeeTargetScaling,
-		HighPricePenalty:    cfg.HighPricePenalty,
-		MinFee:              cfg.MinFee,
-		MinPriceScale:       cfg.MinPriceScale,
-		MaxFee:              cfg.MaxFee,
-		MaxPerBlock:         cfg.MaxPerBlock,
-		MaxPriceAbsolute:    cfg.MaxPriceAbsolute,
-		MaxPriceScale:       cfg.MaxPriceScale,
-		MaxInMempool:        cfg.MaxInMempool,
-		PoolAddress:         cfg.PoolAddress,
-		PoolFees:            cfg.PoolFees,
-		PriceTarget:         cfg.PriceTarget,
-		TicketAddress:       cfg.TicketAddress,
-		TxFee:               cfg.TxFee,
-		PrevToBuyDiffPeriod: prevToBuyDiffPeriod,
-		PrevToBuyHeight:     prevToBuyHeight,
-	}
-	purchaser, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg,
-		dcrdClient, dcrwClient, activeNet.Params)
+	purchaser, err := newTicketPurchaser(cfg, dcrdClient, dcrwClient)
 	if err != nil {
 		fmt.Printf("Failed to start purchaser: %s\n", err.Error())
 		os.Exit(1)
 	}
 
 	wsm := newPurchaseManager(purchaser, connectChan, quit)
-	go wsm.blockConnectedHandler(func(pInfo *ticketbuyer.PurchaseInfo) {
-		writePurchaseInfo(pInfo, dcrdClient)
-	})
+	go wsm.blockConnectedHandler()
 
-	tkbyLog.Infof("Daemon and wallet successfully connected, beginning " +
+	log.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
 
-	pInfo, err := purchaser.Purchase(atomic.LoadInt64(&glChainHeight))
+	err = wsm.purchaser.purchase(atomic.LoadInt64(&glChainHeight))
 	if err != nil {
-		tkbyLog.Errorf("Failed to purchase tickets this round: %s",
+		log.Errorf("Failed to purchase tickets this round: %s",
 			err.Error())
 	}
-	writePurchaseInfo(pInfo, dcrdClient)
 
 	// If the HTTP server is enabled, spin it up and begin
 	// displaying the front page locally.
@@ -298,7 +221,7 @@ func main() {
 			http.Handle("/csvdata/", http.StripPrefix("/csvdata/", http.FileServer(http.Dir(cfg.DataDir))))
 			err := http.ListenAndServe(cfg.HTTPSvrBind+":"+port, nil)
 			if err != nil {
-				tkbyLog.Errorf("Failed to bind http server: %s", err.Error())
+				log.Errorf("Failed to bind http server: %s", err.Error())
 			}
 		}()
 	}

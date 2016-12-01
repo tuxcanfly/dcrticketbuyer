@@ -2,7 +2,7 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package ticketbuyer
+package main
 
 import (
 	"strings"
@@ -21,6 +21,22 @@ var (
 	vwapReqTryDelay = time.Millisecond * 500
 )
 
+// priceMode is the mode to use for the average ticket price.
+type avgPriceMode int
+
+const (
+	// VWAPMode indicates to use only the VWAP.
+	AvgPriceVWAPMode = iota
+
+	// PoolMode indicates to use only the average
+	// price in the ticket pool.
+	AvgPricePoolMode
+
+	// DualMode indicates to use bothe the VWAP and
+	// the average pool price.
+	AvgPriceDualMode
+)
+
 // vwapHeightOffsetErrStr is a definitive portion of the RPC error returned
 // when the chain has not yet sufficiently synced to the chain tip.
 var vwapHeightOffsetErrStr = "beyond blockchain tip height"
@@ -35,7 +51,7 @@ func containsVWAPHeightOffsetError(err error) bool {
 
 // calcAverageTicketPrice calculates the average price of a ticket based on
 // the parameters set by the user.
-func (t *TicketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, error) {
+func (t *ticketPurchaser) calcAverageTicketPrice(height int64) (dcrutil.Amount, error) {
 	// Pull and store relevant data about the blockchain. Calculate a
 	// "reasonable" ticket price by using the VWAP for the last delta many
 	// blocks or the average price of all tickets in the ticket pool.

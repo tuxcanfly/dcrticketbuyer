@@ -2,7 +2,7 @@
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
-package ticketbuyer
+package main
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func (p diffPeriodFees) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 // from recent blocks to figure out what to set the user's ticket fees to.
 // Instead, it uses data from the last windowsToConsider many windows and
 // takes an average fee from the closest one.
-func (t *TicketPurchaser) findClosestFeeWindows(difficulty float64,
+func (t *ticketPurchaser) findClosestFeeWindows(difficulty float64,
 	useMedian bool) (float64, error) {
 	wtcUint32 := uint32(windowsToConsider)
 	info, err := t.dcrdChainSvr.TicketFeeInfo(&zeroUint32, &wtcUint32)
@@ -62,7 +62,7 @@ func (t *TicketPurchaser) findClosestFeeWindows(difficulty float64,
 		// Skip the first window if it's not full.
 		span := info.FeeInfoWindows[i].EndHeight -
 			info.FeeInfoWindows[i].StartHeight
-		if i == 0 && int64(span) < t.activeNet.StakeDiffWindowSize {
+		if i == 0 && int64(span) < activeNet.StakeDiffWindowSize {
 			continue
 		}
 
@@ -111,7 +111,7 @@ func (t *TicketPurchaser) findClosestFeeWindows(difficulty float64,
 
 // findMeanTicketFeeBlocks finds the mean of the mean of fees from BlocksToAvg
 // many blocks using the ticketfeeinfo RPC API.
-func (t *TicketPurchaser) findTicketFeeBlocks(useMedian bool) (float64, error) {
+func (t *ticketPurchaser) findTicketFeeBlocks(useMedian bool) (float64, error) {
 	btaUint32 := uint32(t.cfg.BlocksToAvg)
 	info, err := t.dcrdChainSvr.TicketFeeInfo(&btaUint32, nil)
 	if err != nil {
