@@ -12,28 +12,10 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
-)
-
-// Global variables are displayed below that are mainly used for the purposes
-// of the HTTP server.
-var (
-	// chainHeight is the global chainHeight. It must be accessed with
-	// atomic operators.
-	glChainHeight = int64(0)
-
-	// glBalance is the global balance. It is updated at start up and
-	// after every round of ticket purchases. It must be accessed with
-	// atomic operators.
-	glBalance = int64(0)
-
-	// glTicketPrice is the global ticket price. It is updated at
-	// start up and after every round of ticket purchases.
-	glTicketPrice = int64(0)
 )
 
 const (
@@ -41,21 +23,20 @@ const (
 	blockConnChanBuffer = 100
 )
 
-// syncGlobalsStartup syncs the globals for the HTTP server on startup.
-func syncGlobalsStartup(dcrdClient *dcrrpcclient.Client,
-	dcrwClient *dcrrpcclient.Client, cfg *config) error {
+// writeStats writes the stats to a CSV file for use by the HTTP server on
+// startup.
+func writeStats(dcrdClient *dcrrpcclient.Client, dcrwClient *dcrrpcclient.Client,
+	cfg *config) error {
 	_, height, err := dcrdClient.GetBestBlock()
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&glChainHeight, height)
 
 	bal, err := dcrwClient.GetBalanceMinConfType(cfg.AccountName,
 		0, "spendable")
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&glBalance, int64(bal))
 
 	sd, err := dcrdClient.GetStakeDifficulty()
 	if err != nil {
@@ -65,9 +46,7 @@ func syncGlobalsStartup(dcrdClient *dcrrpcclient.Client,
 	if err != nil {
 		return err
 	}
-	atomic.StoreInt64(&glTicketPrice, int64(nsdAmt))
-
-	return nil
+	return writeStatsCsvFile(height, int64(bal), int64(nsdAmt))
 }
 
 func main() {
@@ -179,9 +158,9 @@ func main() {
 			"wallet for tickets to be purchased.")
 	}
 
-	err = syncGlobalsStartup(dcrdClient, dcrwClient, cfg)
+	err = writeStats(dcrdClient, dcrwClient, cfg)
 	if err != nil {
-		fmt.Printf("Failed to start sync globals on startup: %s\n", err.Error())
+		fmt.Printf("Failed to write stats on startup: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -205,12 +184,6 @@ func main() {
 
 	log.Infof("Daemon and wallet successfully connected, beginning " +
 		"to purchase tickets")
-
-	err = wsm.purchaser.purchase(atomic.LoadInt64(&glChainHeight))
-	if err != nil {
-		log.Errorf("Failed to purchase tickets this round: %s",
-			err.Error())
-	}
 
 	// If the HTTP server is enabled, spin it up and begin
 	// displaying the front page locally.

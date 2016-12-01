@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,43 +15,27 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 
 	"github.com/decred/dcrutil"
 )
 
-// csvTicketPricesFn is the filename for the CSV of the ticket prices.
-var csvTicketPricesFn = "prices.csv"
+const (
+	// csvStatsFn is the filename for the CSV of stats.
+	csvStatsFn = "stats.csv"
 
-// csvMempoolFn is the filename for the CSV of the tickets in mempool.
-var csvMempoolFn = "mempool.csv"
+	// csvTicketPricesFn is the filename for the CSV of the ticket prices.
+	csvTicketPricesFn = "prices.csv"
 
-// csvPurchasedFn is the filename for the CSV tracking number of tickets
-// purchased.
-var csvPurchasedFn = "purchased.csv"
+	// csvMempoolFn is the filename for the CSV of the tickets in mempool.
+	csvMempoolFn = "mempool.csv"
 
-// csvFeesFn is the filename for the CSV tracking stake fees.
-var csvFeesFn = "fees.csv"
+	// csvPurchasedFn is the filename for the CSV tracking number of tickets
+	// purchased.
+	csvPurchasedFn = "purchased.csv"
 
-// csvUpdateData contains all the information required to update the CSV
-// files for the HTTP server.
-type csvUpdateData struct {
-	height     int64
-	tpMinScale float64
-	tpMaxScale float64
-	tpAverage  float64
-	tpNext     float64
-	tpCurrent  float64
-	tnAll      int
-	tnOwn      int
-	purchased  int
-	leftWindow int
-	tfMin      float64
-	tfMax      float64
-	tfMedian   float64
-	tfMean     float64
-	tfOwn      float64
-}
+	// csvFeesFn is the filename for the CSV tracking stake fees.
+	csvFeesFn = "fees.csv"
+)
 
 const (
 	// chartCutoffTicketPrice is the chart cutoff value for ticket prices
@@ -86,6 +71,10 @@ func initCsvFiles() error {
 	// and continues.
 	missing := false
 	if _, err := os.Stat(filepath.Join(csvPath,
+		csvStatsFn)); os.IsNotExist(err) {
+		missing = true
+	}
+	if _, err := os.Stat(filepath.Join(csvPath,
 		csvTicketPricesFn)); os.IsNotExist(err) {
 		missing = true
 	}
@@ -108,7 +97,14 @@ func initCsvFiles() error {
 	}
 	// Create the respective files and initialize the CSVs
 	// with proper headers.
-	f, err := os.Create(filepath.Join(csvPath, csvTicketPricesFn))
+	f, err := os.Create(filepath.Join(csvPath, csvStatsFn))
+	if err != nil {
+		return err
+	}
+	f.WriteString("Height,Balance,Price\n")
+	f.Close()
+
+	f, err = os.Create(filepath.Join(csvPath, csvTicketPricesFn))
 	if err != nil {
 		return err
 	}
@@ -186,8 +182,41 @@ func strFeesCsv(height int64, min, max, median, mean, own float64) string {
 	return buf.String()
 }
 
+// strStats converts ticket stats to an easy-to-write string for the csv
+// files.
+func strStats(height, balance, price int64) string {
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("%v,%v,%v\n", height, balance, price))
+
+	return buf.String()
+}
+
+// writeStatsCsvFile writes the stats data to the CSV file.
+func writeStatsCsvFile(height, balance, price int64) error {
+	f, err := os.OpenFile(filepath.Join(csvPath, csvStatsFn),
+		os.O_APPEND|os.O_WRONLY, os.ModeAppend)
+	if err != nil {
+		return err
+	}
+	writer := bufio.NewWriter(f)
+	str := strStats(height, balance, price)
+	_, err = writer.WriteString(str)
+	if err != nil {
+		return err
+	}
+	err = writer.Flush()
+	if err != nil {
+		return err
+	}
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // writeToCsvFiles writes the update data for the CSVs to their respective files.
-func writeToCsvFiles(csvUD csvUpdateData) error {
+func writeToCsvFiles(csvUD *purchaseStats) error {
 	height := csvUD.height
 
 	f, err := os.OpenFile(filepath.Join(csvPath, csvTicketPricesFn),
@@ -332,15 +361,42 @@ func addDimpleChart(chartName, title, dataLoc, xItem, yItem,
 	return str
 }
 
-// writeMainGraphs writes the HTTP response feeding the end user graphs. It is
-// protected under the mutex because we don't want a race to occur where the
-// files are being written to when they're attempting to be read below.
+// writeMainGraphs writes the HTTP response feeding the end user graphs.
 func writeMainGraphs(w http.ResponseWriter, r *http.Request) {
+	f, err := os.OpenFile(filepath.Join(csvPath, csvStatsFn),
+		os.O_RDONLY, os.ModeAppend)
+	if err != nil {
+		log.Errorf("Failed to open stats csv file: %v", err)
+		return
+	}
+
+	lines, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		log.Errorf("Failed to read stats csv file: %v", err)
+		return
+	}
+	if len(lines) < 2 {
+		log.Errorf("Failed to parse stats csv file: %v", err)
+		return
+	}
+	last := lines[len(lines)-1]
 	// Load the chainHeight for use in filtering the graphs.
-	height := atomic.LoadInt64(&glChainHeight)
-	balance := atomic.LoadInt64(&glBalance)
+	height, err := strconv.ParseInt(last[0], 0, 64)
+	if err != nil {
+		log.Errorf("Failed to parse height from stats csv file: %v", err)
+		return
+	}
+	balance, err := strconv.ParseInt(last[1], 0, 64)
+	if err != nil {
+		log.Errorf("Failed to parse balance from stats csv file: %v", err)
+		return
+	}
+	stakeDiff, err := strconv.ParseInt(last[2], 0, 64)
+	if err != nil {
+		log.Errorf("Failed to parse ticket price from stats csv file: %v", err)
+		return
+	}
 	balanceAmt := dcrutil.Amount(balance)
-	stakeDiff := atomic.LoadInt64(&glTicketPrice)
 	stakeDiffAmt := dcrutil.Amount(stakeDiff)
 
 	// Page components.

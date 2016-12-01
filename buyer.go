@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync/atomic"
 
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
@@ -71,12 +70,40 @@ out:
 		select {
 		case height := <-p.blockConnectedChan:
 			daemonLog.Infof("Block height %v connected", height)
-			atomic.StoreInt64(&glChainHeight, height)
-			err := p.purchaser.purchase(height)
+			ps, err := p.purchaser.purchase(height)
 			if err != nil {
 				log.Errorf("Failed to purchase tickets this round: %s",
 					err.Error())
 			}
+
+			// Write ticket fee info for the current block to the
+			// CSV update data.
+			err = writeStatsCsvFile(ps.height, ps.bal, ps.price)
+			if err != nil {
+				log.Errorf("Failed to write purchase stats: %v", err)
+			}
+			oneBlock := uint32(1)
+			info, err := t.dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
+			if err != nil {
+				return ps, err
+			}
+			ps.tfMin = info.FeeInfoBlocks[0].Min
+			ps.tfMax = info.FeeInfoBlocks[0].Max
+			ps.tfMedian = info.FeeInfoBlocks[0].Median
+			ps.tfMean = info.FeeInfoBlocks[0].Mean
+
+			// The expensive call to fetch all tickets in the mempool
+			// is here.
+			all, err := t.allTicketsInMempool()
+			if err != nil {
+				return ps, err
+			}
+			ps.tnAll = all
+			err = writeToCsvFiles(ps)
+			if err != nil {
+				log.Errorf("Failed to write CSV graph data: %s", err)
+			}
+
 		// TODO Poll every couple minute to check if connected;
 		// if not, try to reconnect.
 		case <-p.quit:
@@ -112,6 +139,8 @@ type ticketPurchaser struct {
 	useMedian           bool         // Flag for using median for ticket fees
 	priceMode           avgPriceMode // Price mode to use to calc average price
 	heightCheck         map[int64]struct{}
+	balEstimated        dcrutil.Amount
+	ticketPrice         dcrutil.Amount
 }
 
 // newTicketPurchaser creates a new ticketPurchaser.
@@ -214,54 +243,39 @@ func newTicketPurchaser(cfg *config,
 	}, nil
 }
 
+type purchaseStats struct {
+	height     int64
+	tpMinScale float64
+	tpMaxScale float64
+	tpAverage  float64
+	tpNext     float64
+	tpCurrent  float64
+	tnAll      int
+	tnOwn      int
+	purchased  int
+	leftWindow int
+	tfMin      float64
+	tfMax      float64
+	tfMedian   float64
+	tfMean     float64
+	tfOwn      float64
+	bal        int64
+	price      int64
+}
+
 // purchase is the main handler for purchasing tickets for the user.
 // TODO Not make this an inlined pile of crap.
-func (t *ticketPurchaser) purchase(height int64) error {
+func (t *ticketPurchaser) purchase(height int64) (*purchaseStats, error) {
 
+	ps := &purchaseStats{height: height}
 	// Check to make sure that the current height has not already been seen
 	// for a reorg or a fork
 	if _, exists := t.heightCheck[height]; exists {
 		log.Tracef("We've already seen this height, "+
 			"reorg/fork detected at height %v", height)
-		return nil
+		return ps, nil
 	}
 	t.heightCheck[height] = struct{}{}
-
-	// Initialize webserver update data. If the webserver is
-	// enabled, defer a function that writes this data to the
-	// disk.
-	var csvData csvUpdateData
-	csvData.height = height
-
-	if t.cfg.HTTPSvrPort != 0 {
-		// Write ticket fee info for the current block to the
-		// CSV update data.
-		oneBlock := uint32(1)
-		info, err := t.dcrdChainSvr.TicketFeeInfo(&oneBlock, &zeroUint32)
-		if err != nil {
-			return err
-		}
-		csvData.tfMin = info.FeeInfoBlocks[0].Min
-		csvData.tfMax = info.FeeInfoBlocks[0].Max
-		csvData.tfMedian = info.FeeInfoBlocks[0].Median
-		csvData.tfMean = info.FeeInfoBlocks[0].Mean
-
-		// The expensive call to fetch all tickets in the mempool
-		// is here.
-		all, err := t.allTicketsInMempool()
-		if err != nil {
-			return err
-		}
-		csvData.tnAll = all
-
-		defer func() {
-			err := writeToCsvFiles(csvData)
-			if err != nil {
-				log.Errorf("Failed to write CSV graph data: %s",
-					err.Error())
-			}
-		}()
-	}
 
 	// Just starting up, initialize our purchaser and start
 	// buying. Set the start up regular transaction fee here
@@ -334,12 +348,12 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	maxPerBlock := 0
 	switch {
 	case t.cfg.MaxPerBlock == 0:
-		return nil
+		return ps, nil
 	case t.cfg.MaxPerBlock > 0:
 		maxPerBlock = t.cfg.MaxPerBlock
 	case t.cfg.MaxPerBlock < 0:
 		if int(height)%t.cfg.MaxPerBlock != 0 {
-			return nil
+			return ps, nil
 		}
 		maxPerBlock = 1
 	}
@@ -348,74 +362,79 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	// wallet is unlocked, otherwise abort.
 	walletInfo, err := t.dcrwChainSvr.WalletInfo()
 	if err != nil {
-		return err
+		return ps, err
 	}
 	if !walletInfo.DaemonConnected {
-		return fmt.Errorf("Wallet not connected to daemon")
+		return ps, fmt.Errorf("Wallet not connected to daemon")
 	}
 	if !walletInfo.Unlocked {
-		return fmt.Errorf("Wallet not unlocked to allow ticket purchases")
+		return ps, fmt.Errorf("Wallet not unlocked to allow ticket purchases")
 	}
 
 	avgPriceAmt, err := t.calcAverageTicketPrice(height)
 	if err != nil {
-		return fmt.Errorf("Failed to calculate average ticket price amount: %s",
+		return ps, fmt.Errorf("Failed to calculate average ticket price amount: %s",
 			err.Error())
 	}
 	avgPrice := avgPriceAmt.ToCoin()
 	log.Tracef("Calculated average ticket price: %v", avgPriceAmt)
-	csvData.tpAverage = avgPrice
+	ps.tpAverage = avgPrice
 
 	stakeDiffs, err := t.dcrwChainSvr.GetStakeDifficulty()
 	if err != nil {
-		return err
+		return ps, err
 	}
 	nextStakeDiff, err := dcrutil.NewAmount(stakeDiffs.NextStakeDifficulty)
 	if err != nil {
-		return err
+		return ps, err
 	}
-	csvData.tpCurrent = stakeDiffs.NextStakeDifficulty
-	atomic.StoreInt64(&glTicketPrice, int64(nextStakeDiff))
+	ps.tpCurrent = stakeDiffs.NextStakeDifficulty
+	t.ticketPrice = nextStakeDiff
+	ps.price = int64(nextStakeDiff)
 
 	sDiffEsts, err := t.dcrdChainSvr.EstimateStakeDiff(nil)
 	if err != nil {
-		return err
+		return ps, err
 	}
-	csvData.tpNext = sDiffEsts.Expected
+	ps.tpNext = sDiffEsts.Expected
 
 	// Scale the average price according to the configuration parameters
 	// to find minimum and maximum prices for users that are electing to
 	// attempting to manipulate the stake difficulty.
 	maxPriceAbsAmt, err := dcrutil.NewAmount(t.cfg.MaxPriceAbsolute)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	maxPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MaxPriceScale * avgPrice)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	if t.maintainMaxPrice {
 		log.Tracef("The maximum price to maintain for this round is set to %v",
 			maxPriceScaledAmt)
 	}
-	csvData.tpMaxScale = maxPriceScaledAmt.ToCoin()
+	ps.tpMaxScale = maxPriceScaledAmt.ToCoin()
 	minPriceScaledAmt, err := dcrutil.NewAmount(t.cfg.MinPriceScale * avgPrice)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	if t.maintainMinPrice {
 		log.Tracef("The minimum price to maintain for this round is set to %v",
 			minPriceScaledAmt)
 	}
-	csvData.tpMinScale = minPriceScaledAmt.ToCoin()
+	ps.tpMinScale = minPriceScaledAmt.ToCoin()
 
 	balSpendable, err := t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
 		0, "spendable")
 	if err != nil {
-		return err
+		return ps, err
 	}
 	log.Debugf("Current spendable balance at height %v for account '%s': %v",
 		height, t.cfg.AccountName, balSpendable)
+	if t.balEstimated == 0 {
+		t.balEstimated = balSpendable
+	}
+	ps.bal = int64(balSpendable)
 
 	// Checking to see if previous amount buy tickets and height are set,
 	// then check to make sure that it was from the same current stake
@@ -433,11 +452,9 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	}
 
 	// Check for new balance credits and update ticket queue if necessary
-	// TODO: remove atomic on glBalance is possible
-	balEstimated := atomic.LoadInt64(&glBalance)
-	if int64(balSpendable)-int64(balEstimated) > atomic.LoadInt64(&glTicketPrice) {
+	if int64(balSpendable)-int64(t.balEstimated) > int64(t.ticketPrice) {
 		log.Tracef("Current balance %v is greater than estimated "+
-			"balance: %v", int64(balSpendable), int64(balEstimated))
+			"balance: %v", balSpendable, t.balEstimated)
 		fillTicketQueue = true
 	}
 
@@ -513,7 +530,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 				curPrice, targetPrice, t.toBuyDiffPeriod)
 		}
 	}
-	csvData.leftWindow = t.toBuyDiffPeriod
+	ps.leftWindow = t.toBuyDiffPeriod
 	// Disable purchasing if the ticket price is too high based on
 	// the absolute cutoff or if the estimated ticket price is above
 	// our scaled cutoff based on the ideal ticket price.
@@ -521,30 +538,30 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		log.Tracef("Aborting ticket purchases because the ticket price %v "+
 			"is higher than the maximum absolute price %v", nextStakeDiff,
 			maxPriceAbsAmt)
-		return nil
+		return ps, nil
 	}
 	if t.maintainMaxPrice && (sDiffEsts.Expected > maxPriceScaledAmt.ToCoin()) &&
 		maxPriceScaledAmt != 0 {
 		log.Tracef("Aborting ticket purchases because the ticket price "+
 			"next window estimate %v is higher than the maximum scaled "+
 			"price %v", sDiffEsts.Expected, maxPriceScaledAmt)
-		return nil
+		return ps, nil
 	}
 
 	// If we still have tickets in the memory pool, don't try
 	// to buy even more tickets.
 	inMP, err := t.ownTicketsInMempool()
 	if err != nil {
-		return err
+		return ps, err
 	}
-	csvData.tnOwn = inMP
+	ps.tnOwn = inMP
 	if !t.cfg.DontWaitForTickets {
 		if inMP > t.cfg.MaxInMempool {
 			log.Debugf("Currently waiting for %v tickets to enter the "+
 				"blockchain before buying more tickets (in mempool: %v,"+
 				" max allowed in mempool %v)", inMP-t.cfg.MaxInMempool,
 				inMP, t.cfg.MaxInMempool)
-			return nil
+			return ps, nil
 		}
 	}
 
@@ -556,12 +573,12 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		chainFee, err = t.findClosestFeeWindows(nextStakeDiff.ToCoin(),
 			t.useMedian)
 		if err != nil {
-			return err
+			return ps, err
 		}
 	} else {
 		chainFee, err = t.findTicketFeeBlocks(t.useMedian)
 		if err != nil {
-			return err
+			return ps, err
 		}
 	}
 
@@ -580,16 +597,16 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	}
 	feeToUseAmt, err := dcrutil.NewAmount(feeToUse)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	err = t.dcrwChainSvr.SetTicketFee(feeToUseAmt)
 	if err != nil {
-		return err
+		return ps, err
 	}
 
 	log.Debugf("Mean fee for the last blocks or window period was %v; "+
 		"this was scaled to %v", chainFee, feeToUse)
-	csvData.tfOwn = feeToUse
+	ps.tfOwn = feeToUse
 
 	// Only the maximum number of tickets at each block
 	// should be purchased, as specified by the user.
@@ -615,7 +632,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	if toBuyForBlock <= 0 {
 		log.Tracef("All tickets have been purchased, aborting further " +
 			"ticket purchases")
-		return nil
+		return ps, nil
 	}
 
 	// Check our balance versus the amount of tickets we need to buy.
@@ -642,7 +659,7 @@ func (t *ticketPurchaser) purchase(height int64) error {
 				(balSpendable.ToCoin() - float64(toBuyForBlock)*
 					nextStakeDiff.ToCoin()),
 				t.cfg.BalanceToMaintain)
-			return nil
+			return ps, nil
 		}
 	}
 
@@ -655,14 +672,14 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		ticketAddress, err =
 			t.dcrwChainSvr.GetRawChangeAddress(t.cfg.AccountName)
 		if err != nil {
-			return err
+			return ps, err
 		}
 	}
 
 	// Purchase tickets.
 	poolFeesAmt, err := dcrutil.NewAmount(t.cfg.PoolFees)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	minConf := 0
 	expiry := int(height) + t.cfg.ExpiryDelta
@@ -675,11 +692,11 @@ func (t *ticketPurchaser) purchase(height int64) error {
 		&poolFeesAmt,
 		&expiry)
 	if err != nil {
-		return err
+		return ps, err
 	}
 	t.purchasedDiffPeriod += toBuyForBlock
-	csvData.purchased = toBuyForBlock
-	csvData.leftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
+	ps.purchased = toBuyForBlock
+	ps.leftWindow = t.toBuyDiffPeriod - t.purchasedDiffPeriod
 	for i := range tickets {
 		log.Infof("Purchased ticket %v at stake difficulty %v (%v "+
 			"fees per KB used)", tickets[i], nextStakeDiff.ToCoin(),
@@ -694,11 +711,12 @@ func (t *ticketPurchaser) purchase(height int64) error {
 	balSpendable, err = t.dcrwChainSvr.GetBalanceMinConfType(t.cfg.AccountName,
 		0, "spendable")
 	if err != nil {
-		return err
+		return ps, err
 	}
 	log.Debugf("Final spendable balance at height %v for account '%s' "+
 		"after ticket purchases: %v", height, t.cfg.AccountName, balSpendable)
-	atomic.StoreInt64(&glBalance, int64(balSpendable))
+	t.balEstimated = balSpendable
+	ps.bal = int64(balSpendable)
 
-	return nil
+	return ps, nil
 }
