@@ -10,7 +10,7 @@ import (
 
 	"github.com/btcsuite/btclog"
 	"github.com/btcsuite/seelog"
-	"github.com/decred/dcrticketbuyer/ticketbuyer"
+	"github.com/decred/dcrwallet/ticketbuyer"
 )
 
 // Loggers per subsytem.  Note that backendLog is a seelog logger that all of

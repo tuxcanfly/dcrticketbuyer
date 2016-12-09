@@ -43,7 +43,9 @@ imports:
   subpackages:
   - base58
 - name: github.com/decred/dcrwallet
-  version: 706493c4b22cb5934707f3b3c10a0043c530ca7a
+  vcs: git
+  repo: https://github.com/tuxcanfly/btcwallet.git
+  version: fe8e94a987b57c8b4692630f7a8d3c5e84147fe2
   subpackages:
   - netparams
 - name: github.com/decred/ed25519

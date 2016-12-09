@@ -1,6 +1,6 @@
 package main
 
-import "github.com/decred/dcrticketbuyer/ticketbuyer"
+import "github.com/decred/dcrwallet/ticketbuyer"
 
 // zeroUint32 is the zero value for a uint32.
 var zeroUint32 = uint32(0)

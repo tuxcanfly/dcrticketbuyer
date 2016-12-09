@@ -18,8 +18,8 @@ import (
 
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
-	"github.com/decred/dcrticketbuyer/ticketbuyer"
 	"github.com/decred/dcrutil"
+	"github.com/decred/dcrwallet/ticketbuyer"
 )
 
 const (
