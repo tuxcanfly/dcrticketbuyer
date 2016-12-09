@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/decred/dcrd/chaincfg/chainhash"
 	"github.com/decred/dcrd/wire"
 	"github.com/decred/dcrrpcclient"
 	"github.com/decred/dcrutil"
@@ -247,8 +248,48 @@ func main() {
 		PrevToBuyDiffPeriod: prevToBuyDiffPeriod,
 		PrevToBuyHeight:     prevToBuyHeight,
 	}
+	walletCfg := &ticketbuyer.WalletCfg{
+		GetOwnMempoolTix: func() (uint32, error) {
+			sinfo, err := dcrwClient.GetStakeInfo()
+			if err != nil {
+				return 0, err
+			}
+			return sinfo.OwnMempoolTix, nil
+		},
+		SetTxFee: func(fee dcrutil.Amount) error {
+			return dcrwClient.SetTxFee(fee)
+		},
+		SetTicketFee: func(fee dcrutil.Amount) error {
+			return dcrwClient.SetTicketFee(fee)
+		},
+		GetBalance: func() (dcrutil.Amount, error) {
+			return dcrwClient.GetBalanceMinConfType(cfg.AccountName, 0, "spendable")
+		},
+		GetRawChangeAddress: func() (dcrutil.Address, error) {
+			return dcrwClient.GetRawChangeAddress(cfg.AccountName)
+		},
+		PurchaseTicket: func(
+			spendLimit dcrutil.Amount,
+			minConf *int,
+			ticketAddress dcrutil.Address,
+			numTickets *int,
+			poolAddress dcrutil.Address,
+			poolFees *dcrutil.Amount,
+			expiry *int) ([]*chainhash.Hash, error) {
+			return dcrwClient.PurchaseTicket(
+				cfg.AccountName,
+				spendLimit,
+				minConf,
+				ticketAddress,
+				numTickets,
+				poolAddress,
+				poolFees,
+				expiry,
+			)
+		},
+	}
 	purchaser, err := ticketbuyer.NewTicketPurchaser(ticketbuyerCfg,
-		dcrdClient, dcrwClient, activeNet.Params)
+		dcrdClient, walletCfg, activeNet.Params)
 	if err != nil {
 		fmt.Printf("Failed to start purchaser: %s\n", err.Error())
 		os.Exit(1)
